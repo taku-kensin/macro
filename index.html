@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="マクロ">
+<meta name="theme-color" content="#12151a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>マクロ</title>
+<style>
+:root{--bg:#12151a;--panel:#1a1f26;--panel2:#20262f;--line:#2c343f;--ink:#e7eaee;--mute:#8b95a3;--up:#5fbf8f;--dn:#e0727a;--accent:#d6b25e;
+  --num:ui-monospace,"SF Mono","Menlo",monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;font-size:15px}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:5;background:rgba(18,21,26,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;padding:10px 14px;min-height:50px}
+header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .sub{color:var(--mute);font-size:11px}
+.back{background:none;border:0;color:var(--accent);font-size:16px;padding:4px 6px 4px 0}
+main{padding:12px 14px 40px}
+.cat{margin:18px 0 6px;color:var(--accent);font-size:12px;letter-spacing:.14em}
+.item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0}
+.item .t{font-size:15px}
+.item .d{color:var(--mute);font-size:11px;margin-top:2px}
+.item .v{text-align:right;font-family:var(--num);font-size:15px;white-space:nowrap}
+.item .v small{display:block;font-size:11px}
+.up{color:var(--up)} .dn{color:var(--dn)} .mute{color:var(--mute)}
+.ranges{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px}
+.ranges button,.chip{flex:none;background:var(--panel2);border:1px solid var(--line);color:var(--mute);border-radius:16px;padding:6px 12px;font:inherit;font-size:13px}
+.ranges button.on,.chip.on{background:var(--accent);border-color:var(--accent);color:#1a1409;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 10px 4px;margin:10px 0}
+.chart .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
+.chart .hd .val{font-family:var(--num);font-size:17px}
+.chart .hd .chg{font-family:var(--num);font-size:12px}
+.chart .when{color:var(--mute);font-size:11px;font-family:var(--num);min-height:14px}
+canvas{width:100%;height:170px;display:block;touch-action:pan-y}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--num)}
+th{color:var(--mute);font-weight:500;font-family:inherit}
+td:first-child,th:first-child{text-align:left;font-family:inherit}
+.bar{height:8px;border-radius:4px;display:inline-block;vertical-align:middle}
+.lock{max-width:360px;margin:60px auto;padding:0 20px;text-align:center}
+.lock h2{font-size:22px;margin:0 0 6px}
+.lock input[type=password]{width:100%;font-size:17px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);margin:16px 0 10px}
+.lock button{width:100%;font-size:17px;padding:12px;border-radius:10px;border:0;background:var(--accent);color:#1a1409;font-weight:600}
+.lock label{display:block;color:var(--mute);font-size:13px;margin:6px 0 14px}
+.err{color:var(--dn);font-size:13px;min-height:18px}
+.note{color:var(--mute);font-size:12px;line-height:1.5}
+.menu{background:none;border:1px solid var(--line);color:var(--mute);border-radius:8px;padding:4px 8px;font-size:12px}
+</style>
+</head>
+<body>
+<header id="hdr"><h1>マクロ</h1></header>
+<main id="main"></main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let D=null, cur=null, range="1Y", sel={};
+const RANGES=[["1M","1か月",30],["3M","3か月",91],["6M","6か月",182],["1Y","1年",365],["2Y","2年",730],["5Y","5年",1826],["ALL","全期間",1e6]];
+
+function fmt(v){ if(v==null||isNaN(v))return "—"; const a=Math.abs(v);
+  return v.toLocaleString("ja-JP",{maximumFractionDigits:a>=1000?0:a>=10?2:a>=1?3:4}); }
+function ax(v){ const a=Math.abs(v);
+  if(a>=1e8) return (v/1e8).toFixed(a>=1e9?0:1)+"億"; if(a>=1e5) return (v/1e4).toFixed(a>=1e6?0:1)+"万"; return fmt(v); }
+function dlabel(d,period){ return period==="year"?d.slice(0,4)+"年":period==="month"?d.slice(0,4)+"年"+(+d.slice(5,7))+"月":d; }
+function pct(a,b){ if(a==null||b==null||b===0)return null; return (a-b)/Math.abs(b)*100; }
+
+// ---------- 復号 ----------
+async function decrypt(buf,pw){
+  const u=new Uint8Array(buf); const magic=new TextDecoder().decode(u.slice(0,6));
+  if(magic!=="MACRO1") throw new Error("データの形式が違います");
+  const salt=u.slice(6,22), iv=u.slice(22,34), ct=u.slice(34);
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+  let plain; try{ plain=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,ct); }catch(e){ throw new Error("パスワードが違います"); }
+  const ds=new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return JSON.parse(await new Response(ds).text());
+}
+async function load(pw){
+  const r=await fetch("data.bin?t="+Date.now(),{cache:"no-store"}).catch(()=>fetch("data.bin"));
+  if(!r.ok) throw new Error("データを読み込めませんでした（"+r.status+"）");
+  return decrypt(await r.arrayBuffer(),pw);
+}
+function lockScreen(msg){
+  $("#hdr").innerHTML='<h1>マクロ</h1>';
+  $("#main").innerHTML=`<div class="lock"><h2>マクロ</h2><div class="note">パスワードを入れてください</div>
+    <input type="password" id="pw" autocomplete="current-password" placeholder="パスワード">
+    <label><input type="checkbox" id="keep" checked> このiPhoneに記憶する</label>
+    <button id="go">開く</button><div class="err" id="err">${esc(msg||"")}</div></div>`;
+  const go=async()=>{ const pw=$("#pw").value; $("#err").textContent="開いています…";
+    try{ D=await load(pw); if($("#keep").checked) localStorage.setItem("macro_pw",pw); else localStorage.removeItem("macro_pw"); home(); }
+    catch(e){ $("#err").textContent=e.message; } };
+  $("#go").onclick=go; $("#pw").onkeydown=e=>{ if(e.key==="Enter") go(); };
+}
+
+// ---------- 一覧 ----------
+function lastVal(it){
+  if(it.kind!=="ts") return null;
+  const s=it.series.find(s=>s.name===it.defaults[0])||it.series[0];
+  for(let i=s.v.length-1;i>=0;i--) if(s.v[i]!=null){
+    let j=i-1; while(j>=0&&s.v[j]==null) j--;
+    return {name:s.name,v:s.v[i],d:dlabel(it.x[i],it.period),prev:j>=0?s.v[j]:null,flow:it.flow};
+  }
+  return null;
+}
+function home(){
+  cur=null;
+  $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
+  $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
+  let h="";
+  for(const c of D.cats){
+    h+=`<div class="cat">${esc(c.title)}</div>`;
+    for(const it of c.items){
+      const lv=lastVal(it); let right="";
+      if(lv){ const ch=lv.flow?null:(lv.prev!=null?lv.v-lv.prev:null);
+        right=`<div class="v ${lv.flow?(lv.v>0?"up":lv.v<0?"dn":""):""}">${fmt(lv.v)}<small class="${ch>0?"up":ch<0?"dn":"mute"}">${lv.flow?"":ch==null?"":"前回比 "+(ch>0?"+":"")+fmt(ch)}</small></div>`; }
+      else if(it.kind==="snapshot") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄</div>`;
+      else if(it.kind==="strike") right=`<div class="v mute" style="font-size:12px">${esc(it.date)}</div>`;
+      h+=`<div class="item" data-id="${esc(it.id)}"><div><div class="t">${esc(it.title)}</div><div class="d">${lv?esc(lv.name)+"　"+esc(lv.d):""}</div></div>${right}</div>`;
+    }
+  }
+  h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
+  $("#main").innerHTML=h;
+  document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
+  window.scrollTo(0,0);
+}
+
+// ---------- 詳細 ----------
+function findItem(id){ for(const c of D.cats) for(const it of c.items) if(it.id===id) return it; }
+function detail(id){
+  const it=findItem(id); cur=it;
+  $("#hdr").innerHTML=`<button class="back" id="bk">‹ 一覧</button><h1>${esc(it.title)}</h1>`;
+  $("#bk").onclick=home;
+  if(it.kind==="snapshot"){
+    $("#main").innerHTML=`<table><tr><th>銘柄</th><th>価格</th><th>取得時刻</th></tr>${it.rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${fmt(r[1])}</td><td style="font-size:11px">${esc(r[2])}</td></tr>`).join("")}</table>
+      <p class="note">macro_updaterが取った時刻の値です（その時刻より後の値動きは入っていません）。</p>`; return;
+  }
+  if(it.kind==="strike"){
+    const mx=Math.max(1,...it.rows.flatMap(r=>[r[1]||0,r[2]||0]));
+    $("#main").innerHTML=`<p class="note">${esc(it.date)}　限月 ${esc(it.month)}　建玉残高</p><table><tr><th>行使価格</th><th>プット</th><th>コール</th></tr>
+      ${it.rows.filter(r=>(r[1]||0)+(r[2]||0)>0).map(r=>`<tr><td>${fmt(r[0])}</td>
+      <td><span class="bar" style="width:${Math.round((r[1]||0)/mx*70)}px;background:var(--dn)"></span> ${fmt(r[1])}</td>
+      <td><span class="bar" style="width:${Math.round((r[2]||0)/mx*70)}px;background:var(--up)"></span> ${fmt(r[2])}</td></tr>`).join("")}</table>`; return;
+  }
+  if(!sel[id]) sel[id]=[...it.defaults];
+  $("#main").innerHTML=`<div class="ranges" id="rg">${RANGES.map(r=>`<button data-r="${r[0]}" class="${r[0]===range?"on":""}">${r[1]}</button>`).join("")}</div>
+    <div class="chips" id="ch">${it.series.map(s=>`<button class="chip ${sel[id].includes(s.name)?"on":""}" data-n="${esc(s.name)}">${esc(s.name)}</button>`).join("")}</div>
+    <div id="charts"></div>`;
+  $("#rg").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; range=b.dataset.r; detail(id); };
+  $("#ch").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; const n=b.dataset.n, a=sel[id];
+    if(a.includes(n)){ if(a.length>1) a.splice(a.indexOf(n),1); } else a.push(n); detail(id); };
+  drawAll(it);
+  window.scrollTo(0,0);
+}
+function windowIdx(it){
+  const days=RANGES.find(r=>r[0]===range)[2]; const last=it.x[it.x.length-1];
+  const t0=new Date(last).getTime()-days*864e5; let i=0;
+  while(i<it.x.length-1&&new Date(it.x[i]).getTime()<t0) i++;
+  return i;
+}
+function drawAll(it){
+  const i0=windowIdx(it); const box=$("#charts"); box.innerHTML="";
+  const charts=[];
+  for(const name of sel[it.id]){
+    const s=it.series.find(s=>s.name===name); if(!s) continue;
+    const pts=[]; for(let i=i0;i<it.x.length;i++) if(s.v[i]!=null) pts.push([it.x[i],s.v[i]]);
+    const div=document.createElement("div"); div.className="chart";
+    const last=pts.at(-1), first=pts[0];
+    const ch=it.flow?pts.reduce((a,q)=>a+q[1],0):(last&&first?last[1]-first[1]:null), cp=(!it.flow&&last&&first)?pct(last[1],first[1]):null;
+    div.innerHTML=`<div class="hd"><span>${esc(name)}</span><span class="val">${last?fmt(last[1]):"—"}</span></div>
+      <div class="hd"><span class="when">${last?esc(last[0]):"この期間にデータがありません"}</span>
+      <span class="chg ${ch>0?"up":ch<0?"dn":"mute"}">${ch==null?"":`${it.flow?"期間の合計":"期間の変化"} ${ch>0?"+":""}${fmt(ch)}${cp==null?"":`（${cp>0?"+":""}${cp.toFixed(1)}%）`}`}</span></div><canvas></canvas>`;
+    box.appendChild(div);
+    charts.push({div,pts,cv:div.querySelector("canvas"),name});
+  }
+  const paint=(hx)=>charts.forEach(c=>plot(c,hx,it.period,it.flow));
+  paint(null);
+  charts.forEach(c=>{
+    const mv=e=>{ const r=c.cv.getBoundingClientRect(); const t=(e.touches?e.touches[0]:e); paint((t.clientX-r.left)/r.width); };
+    c.cv.addEventListener("touchstart",mv,{passive:true}); c.cv.addEventListener("touchmove",mv,{passive:true});
+    c.cv.addEventListener("mousemove",mv); c.cv.addEventListener("mouseleave",()=>paint(null));
+    c.cv.addEventListener("touchend",()=>setTimeout(()=>paint(null),1500));
+  });
+}
+function plot(c,hx,period,flow){
+  const cv=c.cv, dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=170;
+  cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const p=c.pts; if(p.length===0) return;
+  const T=8,B=18,L=6; g.font="10px ui-monospace,Menlo,monospace"; const xs=p.map(q=>new Date(q[0]).getTime()), ys=p.map(q=>q[1]);
+  let y0=Math.min(...ys), y1=Math.max(...ys); if(flow){ y0=Math.min(y0,0); y1=Math.max(y1,0); } if(y0===y1){y0-=1;y1+=1;} const pad=(y1-y0)*.06; y0-=pad; y1+=pad;
+  const R=Math.max(...[y0,(y0+y1)/2,y1].map(v=>g.measureText(ax(v)).width))+10;
+  const x0=xs[0], x1=xs.at(-1)===x0?x0+1:xs.at(-1);
+  const X=t=>L+(W-L-R)*(t-x0)/(x1-x0), Y=v=>T+(H-T-B)*(1-(v-y0)/(y1-y0));
+  g.font="10px ui-monospace,Menlo,monospace"; g.fillStyle="#8b95a3"; g.strokeStyle="#2c343f"; g.lineWidth=1;
+  for(const k of [0,.5,1]){ const v=y0+(y1-y0)*k, y=Y(v); g.beginPath(); g.moveTo(L,y); g.lineTo(W-R,y); g.stroke(); g.fillText(ax(v),W-R+4,y+3); }
+  if(y0<0&&y1>0){ g.strokeStyle="#465262"; g.beginPath(); g.moveTo(L,Y(0)); g.lineTo(W-R,Y(0)); g.stroke(); }
+  g.fillText(p[0][0].slice(0,period==="year"?4:7),L,H-4); const lt=p.at(-1)[0].slice(0,period==="year"?4:7); g.fillText(lt,W-R-g.measureText(lt).width,H-4);
+  const bars=flow&&p.length<=260;
+  if(bars){ const bw=Math.max(1,(W-L-R)/p.length*.7);
+    p.forEach((q,i)=>{ g.fillStyle=q[1]>=0?"#5fbf8f":"#e0727a"; const y=Y(q[1]), z=Y(Math.max(y0,Math.min(y1,0)));
+      g.fillRect(X(xs[i])-bw/2,Math.min(y,z),bw,Math.max(1,Math.abs(z-y))); }); }
+  else{ g.strokeStyle="#d6b25e"; g.lineWidth=1.6; g.beginPath(); p.forEach((q,i)=>{ const x=X(xs[i]), y=Y(q[1]); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke(); }
+  if(hx!=null){ const tx=x0+(x1-x0)*Math.max(0,Math.min(1,(hx*W-L)/(W-L-R)));
+    let k=0,best=1e99; xs.forEach((t,i)=>{ const d=Math.abs(t-tx); if(d<best){best=d;k=i;} });
+    const x=X(xs[k]), y=Y(p[k][1]); g.strokeStyle="#8b95a3"; g.lineWidth=1; g.beginPath(); g.moveTo(x,T); g.lineTo(x,H-B); g.stroke();
+    g.fillStyle="#e7eaee"; g.beginPath(); g.arc(x,y,3.5,0,7); g.fill();
+    c.div.querySelector(".val").textContent=fmt(p[k][1]); c.div.querySelector(".when").textContent=dlabel(p[k][0],period);
+  } else { c.div.querySelector(".val").textContent=fmt(p.at(-1)[1]); c.div.querySelector(".when").textContent=dlabel(p.at(-1)[0],period); }
+}
+window.addEventListener("resize",()=>{ if(cur&&cur.kind==="ts") drawAll(cur); });
+
+// ---------- 起動 ----------
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+(async()=>{ const pw=localStorage.getItem("macro_pw");
+  if(pw){ $("#main").innerHTML='<div class="lock"><div class="note">開いています…</div></div>';
+    try{ D=await load(pw); home(); return; }catch(e){ localStorage.removeItem("macro_pw"); lockScreen(e.message); return; } }
+  lockScreen(); })();
+</script>
+</body>
+</html>
