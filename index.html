@@ -52,6 +52,18 @@ td:first-child,th:first-child{text-align:left;font-family:inherit}
 .err{color:var(--dn);font-size:13px;min-height:18px}
 .note{color:var(--mute);font-size:12px;line-height:1.5}
 .menu{background:none;border:1px solid var(--line);color:var(--mute);border-radius:8px;padding:4px 8px;font-size:12px}
+.tabs{display:flex;gap:6px;margin:2px 0 8px}.tabs button{flex:1;padding:8px 0;border-radius:18px;background:var(--panel2);color:var(--mute);border:0;font:inherit;font-size:13px}
+.tabs button.on{background:var(--accent);color:#1a1409;font-weight:600}
+.lv{display:inline-block;font-size:12px;padding:2px 9px;border-radius:10px;white-space:nowrap}
+.l2{background:#1f4a36;color:#8fe0b6}.l1{background:#23402f;color:#9fd8b5}.l0{background:#2c343f;color:#b9c1cc}.l-1{background:#4a3a1a;color:#e8c77a}.l-2{background:#4a2226;color:#f0a0a6}.lx{background:#2a2d33;color:#7d8590}
+.meter{display:flex;gap:4px;margin:12px 0 4px}.meter div{flex:1;height:12px;border-radius:4px;background:var(--line)}
+.mlab{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.pbar{height:6px;background:var(--line);border-radius:3px;position:relative;margin:7px 0 3px}.pbar i{position:absolute;top:-3px;width:3px;height:12px;background:var(--accent);border-radius:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0}
+.card .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.more{display:none;border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:13px;color:#b9c1cc}
+.card.open .more{display:block}
+.rg{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;text-align:center;margin-top:6px;font-size:12px}
 </style>
 </head>
 <body>
@@ -108,11 +120,54 @@ function lastVal(it){
   }
   return null;
 }
+let TAB="flow";
+function tabs(){ return `<div class="tabs">${[["flow","いまの流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||D.flow).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
+const LVC=l=>"l"+l;
+function condCard(r,opts={}){
+  const tag=r.stale&&r.stale.length?`<span class="lv lx">データが古い</span>`:`<span class="lv ${LVC(r.level)}">${esc(r.label)}</span>`;
+  const rg=Object.entries(r.regimes).map(([k,v])=>`<span class="mute">${esc(k)}</span>`).join("")+Object.entries(r.regimes).map(([k,v])=>`<span style="font-family:var(--num)">${v==null?"—":(v>0?"+":"")+v}</span>`).join("");
+  return `<div class="card tap"><div class="row"><span>${esc(r.name)}</span>${tag}</div>
+    ${opts.now?`<div class="note">${r.now.map(esc).join("／")}</div>`:""}
+    <div class="row note"><span>前半 ${r.first>0?"+":""}${r.first}／後半 ${r.second>0?"+":""}${r.second}</span><span>上がった割合 ${r.up}%・${r.count}回</span></div>
+    <div class="more">相場ごとの「ふだん」との差（1か月後、ポイント）<div class="rg">${rg}</div>
+    ${r.stale&&r.stale.length?`<div style="margin-top:6px">使っている値が古いため、全体の判定から外しています：${r.stale.map(esc).join("、")}</div>`:""}</div></div>`;
+}
+function flowView(){
+  const f=D.flow; const c=f.counts;
+  let h=`<div class="card"><div class="row"><span class="note">${esc(f.week)}の週の値で判定</span><span class="note">成り立っている条件から</span></div>
+    <div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
+    <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
+    <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>
+    <div class="note" style="margin-top:8px">上がりやすい側 ${c.up}／下がりやすい側 ${c.down}${c.stale?`／データが古く除外 ${c.stale}`:""}</div></div>`;
+  h+=`<div class="cat">成り立っている条件</div>`+(f.lit.length?f.lit.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
+  h+=`<div class="cat">もう少しで成り立つ条件</div>`+(f.near.length?f.near.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
+  h+=`<div class="cat">指標の位置（過去の中で 0〜100）</div><div class="card">`+f.positions.map(p=>`<div class="row" style="margin-top:6px"><span>${esc(p.name)}</span><span style="font-family:var(--num)">${fmt(p.value)}${esc(p.unit)}　${p.pct}</span></div>
+    <div class="pbar"><i style="left:${p.pct}%"></i></div><div class="note" ${p.stale?'style="color:var(--dn)"':""}>${esc(p.span)}　${esc(p.date)}${p.stale?"（古い）":""}</div>`).join("")+`</div>`;
+  if(f.reference&&f.reference.length){
+    h+=`<div class="cat">参考（データが約2年のため、判定には使わない）</div>`+f.reference.map(r=>`<div class="card"><div class="row"><span>${esc(r.name)}</span>${r.lit?'<span class="lv l0">成立中</span>':""}</div>
+      <div class="row note"><span>${esc(r.now)}</span><span>1か月後 ${r.avg==null?"—":(r.avg>0?"+":"")+r.avg+"%"}（ふだん ${r.base>0?"+":""}${r.base}%）・${r.count}回</span></div></div>`).join("");
+  }
+  h+=`<p class="note" style="margin-top:16px">決め方：${esc(f.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
+  return h;
+}
+function perfView(){
+  const f=D.flow;
+  const up=f.all.filter(r=>r.level>0), dn=f.all.filter(r=>r.level<0);
+  return `<p class="note">${f.tested}通りを計算し、前半（2013〜2021）と後半（2022〜）の両方で効いた ${f.all.length}通り。数字は相場ごとの「ふだん」との差（1か月後、ポイント）。ふだん：${Object.entries(f.base).map(([k,v])=>esc(k)+" "+(v>0?"+":"")+v+"%").join("、")}</p>
+    <div class="cat">上がりやすい側（${up.length}）</div>${up.map(r=>condCard(r)).join("")}
+    <div class="cat">下がりやすい側（${dn.length}）</div>${dn.map(r=>condCard(r)).join("")||'<div class="note">ありません</div>'}`;
+}
 function home(){
   cur=null;
   $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
   $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
-  let h="";
+  if(!D.flow) TAB="list";
+  if(TAB!=="list"){
+    $("#main").innerHTML=tabs()+(TAB==="flow"?flowView():perfView());
+    bindTabs(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); window.scrollTo(0,0); return;
+  }
+  let h=tabs();
   for(const c of D.cats){
     h+=`<div class="cat">${esc(c.title)}</div>`;
     for(const it of c.items){
@@ -125,7 +180,7 @@ function home(){
     }
   }
   h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
-  $("#main").innerHTML=h;
+  $("#main").innerHTML=h; bindTabs();
   document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
   window.scrollTo(0,0);
 }
