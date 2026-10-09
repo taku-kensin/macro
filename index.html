@@ -176,6 +176,7 @@ function home(){
         right=`<div class="v ${lv.flow?(lv.v>0?"up":lv.v<0?"dn":""):""}">${fmt(lv.v)}<small class="${ch>0?"up":ch<0?"dn":"mute"}">${lv.flow?"":ch==null?"":"前回比 "+(ch>0?"+":"")+fmt(ch)}</small></div>`; }
       else if(it.kind==="snapshot") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄</div>`;
       else if(it.kind==="strike") right=`<div class="v mute" style="font-size:12px">${esc(it.date)}</div>`;
+      else if(it.kind==="weights") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄　${esc(it.date||"")}</div>`;
       h+=`<div class="item" data-id="${esc(it.id)}"><div><div class="t">${esc(it.title)}</div><div class="d">${lv?esc(lv.name)+"　"+esc(lv.d):""}</div></div>${right}</div>`;
     }
   }
@@ -191,6 +192,12 @@ function detail(id){
   const it=findItem(id); cur=it;
   $("#hdr").innerHTML=`<button class="back" id="bk">‹ 一覧</button><h1>${esc(it.title)}</h1>`;
   $("#bk").onclick=home;
+  if(it.kind==="weights"){
+    const rows=it.rows||[];
+    $("#main").innerHTML=`<p class="note">市場日 ${esc(it.date||"")} ／ 公式基準 ${esc(it.base_date||"")}</p>
+      <table><tr><th>順位</th><th>コード・銘柄</th><th>ウエート</th><th>前日差</th></tr>${rows.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[1])}<div class="note">${esc(r[2])}${r[3]?" ／ "+esc(r[3]):""}</div></td><td>${Number(r[4]).toFixed(4)}%</td><td class="${r[5]>0?"up":r[5]<0?"dn":""}">${r[5]==null?"—":(r[5]>0?"+":"")+Number(r[5]).toFixed(4)+"pt"}</td></tr>`).join("")}</table>
+      <p class="note">${esc(it.method||"")}。公式の日次全225ウエートではなく推計値です。</p>`; return;
+  }
   if(it.kind==="snapshot"){
     $("#main").innerHTML=`<table><tr><th>銘柄</th><th>価格</th><th>取得時刻</th></tr>${it.rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${fmt(r[1])}</td><td style="font-size:11px">${esc(r[2])}</td></tr>`).join("")}</table>
       <p class="note">macro_updaterが取った時刻の値です（その時刻より後の値動きは入っていません）。</p>`; return;
