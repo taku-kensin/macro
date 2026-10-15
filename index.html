@@ -200,6 +200,8 @@ function home(){
         right=`<div class="v ${lv.flow?(lv.v>0?"up":lv.v<0?"dn":""):""}">${fmt(lv.v)}<small class="${ch>0?"up":ch<0?"dn":"mute"}">${lv.flow?"":ch==null?"":"前回比 "+(ch>0?"+":"")+fmt(ch)}</small></div>`; }
       else if(it.kind==="snapshot") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄</div>`;
       else if(it.kind==="strike") right=`<div class="v mute" style="font-size:12px">${esc(it.date)}</div>`;
+      else if(it.kind==="baskets"){ const r=[...it.data.baskets].sort((a,b)=>b.d1-a.d1); right=`<div class="v mute" style="font-size:12px">強い ${esc(r[0].name)}<div>弱い ${esc(r[r.length-1].name)}</div></div>`; }
+      else if(it.kind==="sectors"){ const t=it.rows[0]; right=`<div class="v mute" style="font-size:12px">33業種　${esc(it.date||"")}<div>首位 ${esc(t?t[0]:"")}</div></div>`; }
       else if(it.kind==="weights") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄　${esc(it.date||"")}</div>`;
       h+=`<div class="item" data-id="${esc(it.id)}"><div><div class="t">${esc(it.title)}</div><div class="d">${lv?esc(lv.name)+"　"+esc(lv.d):""}</div></div>${right}</div>`;
     }
@@ -268,6 +270,49 @@ function detail(id){
   const it=findItem(id); cur=it;
   $("#hdr").innerHTML=`<button class="back" id="bk">‹ 一覧</button><h1>${esc(it.title)}</h1>`;
   $("#bk").onclick=home;
+  if(it.kind==="baskets"){
+    const P={d1:"1日",d5:"5日",d20:"20日",qtd:"四半期"}, sp=window.BKSP||"d1", so=window.BKSO||"group", f=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1), c=v=>v>0?"up":v<0?"dn":"";
+    const B=it.data, rows=B.baskets||[], open=window.BKN;
+    const tag=t=>`<span style="font-size:10px;border:1px solid;border-radius:9px;padding:0 6px;margin-left:4px;color:var(${t.diff>0?"--up":"--dn"})">${esc(t.k)}で${t.diff>0?"強い":"弱い"}</span>`;
+    if(open){
+      const r=rows.find(x=>x.name===open);
+      $("#hdr").innerHTML=`<button class="back" id="bk">‹ バスケット</button><h1>${esc(r.name)}</h1>`;
+      $("#bk").onclick=()=>{window.BKN=null; detail(it.id);};
+      let h=`<p class="note">${esc(B.date)}の大引けまで／${r.n}銘柄・時価総額で加重／一番重い銘柄 ${Math.round(r.top_weight||0)}%</p>
+        <div class="card"><div class="kv"><span>対TOPIX 1日</span><b class="${c(r.d1)}">${f(r.d1)}pt</b></div><div class="kv"><span>5日 / 20日 / 四半期</span><b>${f(r.d5)} / ${f(r.d20)} / ${f(r.qtd)}</b></div>
+        ${(r.tags_all||[]).map(t=>`<div class="kv"><span>${esc(t.k)}の日（${t.n}日）</span><b class="${c(t.diff)}">${f(t.avg)}pt・${t.win}%</b></div>`).join("")}</div>
+        <p class="note">中の銘柄（四半期の強い順。#19 サブセクター内の強弱）</p>
+        <table><tr><th style="text-align:left">銘柄</th><th>1日</th><th>四半期</th></tr>${r.members.map(m=>`<tr style="${m.status==="外れ"?"opacity:.45":""}"><td>${esc(m.name)}<div class="note">${esc(m.code)}　${m.weight==null?"":"重み "+m.weight+"%"}${m.status?"　"+esc(m.status):""}</div></td><td class="${c(m.d1)}">${f(m.d1)}</td><td class="${c(m.qtd)}">${f(m.qtd)}</td></tr>`).join("")}</table>
+        <p class="note">外れ＝ほかの銘柄と一緒に動いていないため計算から除外。自動追加＝分析で入れた銘柄。</p>`;
+      $("#main").innerHTML=h; window.scrollTo(0,0); return;
+    }
+    const mx=Math.max(0.1,...rows.map(r=>Math.abs(r[sp]||0)));
+    const one=r=>{const v=r[sp]||0; return `<tr data-n="${esc(r.name)}" style="cursor:pointer"><td style="border-left:4px solid ${r.color};padding-left:8px">${esc(r.name)}${r.n<=1?'<span class="note"> 1銘柄</span>':''}<div>${(r.tags||[]).map(tag).join("")}</div></td><td style="width:34%"><div style="position:relative;height:9px;background:var(--panel2);border-radius:3px"><i style="position:absolute;top:0;bottom:0;${v>=0?"left:50%":"right:50%"};width:${Math.abs(v)/mx*50}%;background:var(${v>=0?"--up":"--dn"})"></i></div></td><td class="${c(v)}">${f(v)}</td></tr>`;};
+    let body="";
+    if(so==="group"){ for(const g of [...new Set(rows.map(r=>r.group))]){ const rs=rows.filter(r=>r.group===g), a=rs.reduce((s,r)=>s+(r[sp]||0),0)/rs.length; body+=`<tr><td colspan="2" style="color:${rs[0].color};font-weight:700;padding-top:12px">${esc(g)}</td><td class="${c(a)}" style="padding-top:12px;font-size:12px">平均 ${f(a)}</td></tr>`+rs.map(one).join(""); } }
+    else body=[...rows].sort((a,b)=>(b[sp]||0)-(a[sp]||0)).map(one).join("");
+    const sb=B.semi_box||[], m2=Math.max(0.1,...sb.map(r=>Math.abs(r.avg)));
+    let h=`<p class="note">${esc(B.date)}の大引けまで（翌朝反映）／中身の見直し ${esc(B.rebalanced)}・次回 ${esc(B.next_rebalance)}</p>
+      <div class="ranges">${Object.entries(P).map(([k,l])=>`<button data-k="${k}" class="${k===sp?"on":""}">${l}</button>`).join("")}<button data-s="${so==="group"?"rank":"group"}">${so==="group"?"強い順":"グループごと"}</button></div>
+      <table>${body}</table>
+      ${sb.length?`<div class="card" style="margin-top:14px"><b>半導体が弱い日に強いところ（YT #24）</b><div class="note">直近250営業日で${(B.cond_days||{})["半導体安"]}日。平均／プラスの割合</div>${sb.map(r=>`<div class="kv"><span>${esc(r.name)}</span><b class="${c(r.avg)}">${f(r.avg)}pt・${r.win}%</b></div>`).join("")}</div>`:""}
+      <p class="note">行を押すと中の銘柄。札はデータから計算（条件の日の対TOPIX）。</p>`;
+    $("#main").innerHTML=h;
+    document.querySelectorAll(".ranges button").forEach(b=>b.onclick=()=>{ if(b.dataset.k) window.BKSP=b.dataset.k; if(b.dataset.s) window.BKSO=b.dataset.s; detail(it.id);});
+    document.querySelectorAll("tr[data-n]").forEach(t=>t.onclick=()=>{window.BKN=t.dataset.n; detail(it.id);});
+    return;
+  }
+  if(it.kind==="sectors"){
+    const K=["1日","5日","20日","60日"], ix={"1日":3,"5日":4,"20日":5,"60日":6}, sp=window.S33||"1日", c=it.check||{}, p=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(2);
+    const rs=it.rows.filter(r=>r[ix[sp]]!=null).sort((a,b)=>b[ix[sp]]-a[ix[sp]]), mx=Math.max(0.01,...rs.map(r=>Math.abs(r[ix[sp]])));
+    let h=`<p class="note">${esc(it.date||"")}（前営業日 ${esc(it.prev_date||"")}）／TOPIX ${p(it.topix_ret)}%／推計との差 ${p(c.gap_pt)}pt</p>
+      <div class="ranges">${K.map(k=>`<button data-k="${k}" class="${k===sp?"on":""}">${k}</button>`).join("")}</div>
+      <table>${rs.map(r=>{const v=r[ix[sp]];return `<tr><td>${esc(r[0])}<div class="note">${r[1]}銘柄　当日 ${p(r[2])}%</div></td><td style="width:38%"><div style="position:relative;height:8px;background:var(--panel2);border-radius:3px"><i style="position:absolute;top:0;bottom:0;${v>=0?"left:50%":"right:50%"};width:${Math.abs(v)/mx*50}%;background:${v>=0?"var(--up,#3DBB7F)":"var(--dn,#F0626A)"}"></i></div></td><td class="${v>0?"up":v<0?"dn":""}">${p(v)}pt</td></tr>`}).join("")||'<tr><td class="note">この期間の記録がまだありません</td></tr>'}</table>
+      <p class="note">TOPIX比（%ポイント）。${esc(it.method||"")}。加重：${esc(it.weight||"")}。記録 ${it.days}営業日。</p>`;
+    $("#main").innerHTML=h;
+    document.querySelectorAll(".ranges button").forEach(b=>b.onclick=()=>{window.S33=b.dataset.k; detail(it.id);});
+    return;
+  }
   if(it.kind==="weights"){
     const rows=it.rows||[], c=it.contrib||{}, yen=v=>v==null?"未取得":(v>0?"+":"")+fmt(Math.round(v))+"円", pct=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(2)+"%";
     const cr=rows.filter(r=>r[7]!=null).sort((a,b)=>b[7]-a[7]);
