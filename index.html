@@ -144,7 +144,7 @@ let TAB="flow";
 let SEC=localStorage.getItem("app_sec")||"macro";
 function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
-function tabs(){ return `<div class="tabs">${[["flow","いまの流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||D.flow).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function tabs(){ return `<div class="tabs">${[["flow","1か月の傾向"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||D.flow).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
 const LVC=l=>"l"+l;
 function condCard(r,opts={}){
@@ -158,7 +158,8 @@ function condCard(r,opts={}){
 }
 function flowView(){
   const f=D.flow; const c=f.counts;
-  let h=`<div class="card"><div class="row"><span class="note">${esc(f.week)}の週の値で判定</span><span class="note">成り立っている条件から</span></div>
+  let h=`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
+    <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>
     <div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
     <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
     <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>
