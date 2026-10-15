@@ -64,6 +64,26 @@ td:first-child,th:first-child{text-align:left;font-family:inherit}
 .more{display:none;border-top:1px solid var(--line);margin-top:9px;padding-top:9px;font-size:13px;color:#b9c1cc}
 .card.open .more{display:block}
 .rg{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;text-align:center;margin-top:6px;font-size:12px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;margin:0 0 12px}
+.seg button{flex:1;border:0;background:none;color:var(--mute);font:inherit;font-size:14px;padding:7px 0;border-radius:8px}
+.seg button.on{background:var(--ink);color:var(--bg);font-weight:600}
+.tot{font-family:var(--num);font-size:30px;letter-spacing:-.01em;margin:4px 0 2px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.kv:first-of-type{border-top:0}
+.kv b{font-weight:400;font-family:var(--num);text-align:right;white-space:nowrap}
+.kv small{display:block;color:var(--mute);font-size:11px}
+.gh{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 6px}
+.gh span:first-child{color:var(--accent);font-size:13px}
+.gh span:last-child{font-family:var(--num);font-size:13px}
+.hl{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin:0 0 6px;padding:10px 12px}
+.hl .row{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.hl .nm{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hl .nm small{color:var(--mute);font-size:11px;margin-left:6px}
+.hl .am{font-family:var(--num);font-size:14px;text-align:right;white-space:nowrap}
+.hl .am small{display:block;font-size:11px}
+.hl .more{display:none;border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+.hl.open .more{display:block}
+.due{display:inline-block;font-size:11px;padding:1px 7px;border-radius:8px;background:#4a3a1a;color:#e8c77a;margin-left:6px}
 </style>
 </head>
 <body>
@@ -121,6 +141,9 @@ function lastVal(it){
   return null;
 }
 let TAB="flow";
+let SEC=localStorage.getItem("app_sec")||"macro";
+function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
 function tabs(){ return `<div class="tabs">${[["flow","いまの流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||D.flow).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
 const LVC=l=>"l"+l;
@@ -162,12 +185,13 @@ function home(){
   cur=null;
   $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
   $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
+  if(SEC==="asset"&&D.asset){ assetView(); return; }
   if(!D.flow) TAB="list";
   if(TAB!=="list"){
-    $("#main").innerHTML=tabs()+(TAB==="flow"?flowView():perfView());
-    bindTabs(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); window.scrollTo(0,0); return;
+    $("#main").innerHTML=seg()+tabs()+(TAB==="flow"?flowView():perfView());
+    bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); window.scrollTo(0,0); return;
   }
-  let h=tabs();
+  let h=seg()+tabs();
   for(const c of D.cats){
     h+=`<div class="cat">${esc(c.title)}</div>`;
     for(const it of c.items){
@@ -181,22 +205,85 @@ function home(){
     }
   }
   h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
-  $("#main").innerHTML=h; bindTabs();
+  $("#main").innerHTML=h; bindTabs(); bindSeg();
   document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
   window.scrollTo(0,0);
 }
 
+// ---------- 資産 ----------
+const yen=v=>v==null?"未取得":fmt(Math.round(v));
+const sgn=v=>v==null?"":(v>0?"+":"")+fmt(Math.round(v));
+const cls=v=>v>0?"up":v<0?"dn":"mute";
+const md=d=>d?(+d.slice(5,7))+"/"+(+d.slice(8,10)):"—";
+function hhmm(t){ return t?t.slice(11,16):""; }
+function assetView(){
+  const A=D.asset, I=A.import||{}, F=A.fetched||{};
+  const jpT=F.portfolio||F.jp_summary, inSession=jpT&&jpT.slice(0,10)===I.kijun_jp&&jpT.slice(11,16)<"15:30";
+  $("#hdr").innerHTML=`<h1>資産<div class="sub">基準日 日本 ${esc(md(I.kijun_jp))}・米国 ${esc(md(I.kijun_us))} ／ 取り込み ${esc((I.run_at||"").replace("T"," ").slice(0,16))}</div></h1><button class="menu" id="lk">ロック</button>`;
+  $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
+  const T=A.totals, t0=T[0], prev=T.slice(1).find(r=>r.total!=null);
+  let h=seg();
+  h+=`<div class="card" data-id="${esc(A.total_item.id)}" id="totc"><div class="row"><span class="note">総資産（${esc(t0.kijun)}）</span><span class="note">推移を見る ›</span></div>
+    <div class="tot">${yen(t0.total)}</div>
+    <div class="note ${prev?cls(t0.total-prev.total):""}">${prev&&t0.total!=null?`前回（${esc(prev.kijun)}）比 ${sgn(t0.total-prev.total)}`:""}</div>
+    <div style="margin-top:10px">${[["cash_sec","現金等（証券）"],["bank","円普通預金"],["jp_stock","国内株式"],["us_stock","米国株式"],["usd_cash","米ドル預り金"],["fund","投資信託"],["margin","信用建玉の評価損益"]]
+      .map(([k,n])=>`<div class="kv"><span>${n}</span><b class="${k==="margin"?cls(t0[k]):""}">${yen(t0[k])}</b></div>`).join("")}</div>
+    <div class="note" style="margin-top:6px">${esc(t0.source)}。${esc(t0.note)}${inSession?`。日本側は ${esc(hhmm(jpT))} 取得（取引時間中）の値`:""}</div></div>`;
+  for(const g of A.groups){
+    const title={"日本株":"日本株","米国株":"米国株（円換算）","投資信託":"投資信託","信用":"信用建玉"}[g.asset];
+    h+=`<div class="gh"><span>${title}　${esc(md(g.kijun))}</span><span>${g.asset==="信用"?"建代金 ":""}${yen(g.value)}　<span class="${cls(g.pnl)}">${sgn(g.pnl)}</span></span></div>`;
+    for(const it of g.items){
+      const days=it.due?Math.round((new Date(it.due+"T00:00:00")-new Date(new Date().toDateString()))/864e5):null;
+      const sub=g.asset==="信用"?`${esc(it.side||"")}`:(it.code?esc(it.code):"");
+      const rate=(it.pnl!=null&&it.value)?(g.asset==="信用"?it.pnl/it.value:it.pnl/(it.value-it.pnl))*100:null;
+      let more="";
+      if(g.asset==="信用") more=`<div class="kv"><span>建株数・建単価</span><b>${fmt(it.qty)}　${fmt(it.cost)}</b></div><div class="kv"><span>現在値</span><b>${fmt(it.price)}</b></div><div class="kv"><span>建日</span><b>${esc(it.open||"—")}</b></div><div class="kv"><span>返済期限</span><b>${esc(it.due||"—")}</b></div>`;
+      else if(g.asset==="投資信託") more=`<div class="kv"><span>口座</span><b>${esc(it.acc.join("・"))}</b></div><div class="kv"><span>口数</span><b>${fmt(it.qty)}</b></div><div class="kv"><span>取得単価・基準価額（1万口）</span><b>${fmt(it.cost)}　${fmt(it.price)}</b></div>`;
+      else more=`<div class="kv"><span>保有数</span><b>${fmt(it.qty)}</b></div><div class="kv"><span>取得単価・現在値${g.asset==="米国株"?"（USD）":""}</span><b>${fmt(it.cost)}　${fmt(it.price)}</b></div>
+        <div class="kv"><span>買付日<small>${esc(it.buy_src||"")}</small></span><b>${esc(it.buy||"未取得")}</b></div><div class="kv"><span>口座</span><b>${esc(it.acc.join("・"))}</b></div>
+        <div class="kv"><span>実現損益（${esc(md(A.kiten))}〜、税引前）</span><b class="${cls(it.real)}">${sgn(it.real)||"0"}</b></div>`;
+      h+=`<div class="hl"><div class="row"><div style="min-width:0"><div class="nm">${esc(it.name)}<small>${sub}</small></div>${it.due?`<span class="due" style="margin:4px 0 0">返済期限 ${esc(md(it.due))}${days!=null?`（残り${days}日）`:""}</span>`:""}</div>
+        <div class="am">${yen(it.value)}<small class="${cls(it.pnl)}">${sgn(it.pnl)}${rate==null?"":`（${rate>0?"+":""}${rate.toFixed(1)}%）`}</small></div></div><div class="more">${more}</div></div>`;
+    }
+  }
+  h+=`<div class="gh"><span>実現損益　${esc(md(A.kiten))}〜（税引前）</span><span class="${cls(A.realized.reduce((a,r)=>a+(r.sum||0),0))}">${sgn(A.realized.reduce((a,r)=>a+(r.sum||0),0))}</span></div><div class="card">`+
+    (A.realized.length?A.realized.map(r=>`<div class="kv"><span>${esc(r.product)}${r.kind?"・"+esc(r.kind):""}<small>${r.n}件　明細 ${esc(r.status)}</small></span><b class="${cls(r.sum)}">${sgn(r.sum)}</b></div>`).join(""):`<div class="note">この期間の売却はありません</div>`)+`</div>`;
+  h+=`<div class="gh"><span>配当・分配金　${esc(md(A.kiten))}〜（税引後）</span><span>${yen(A.div.reduce((a,r)=>a+(r.sum||0),0))}</span></div><div class="card">`+
+    (A.div.length?A.div.map(r=>`<div class="kv"><span>${esc(r.product)}<small>${r.n}件</small></span><b>${yen(r.sum)}</b></div>`).join(""):`<div class="note">この期間の受け取りはありません</div>`)+
+    `<div class="note" style="margin-top:4px">明細の期間 ${esc(A.div_cov?A.div_cov.join("〜"):"未取得")}</div></div>`;
+  h+=`<div class="gh"><span>年別</span><span class="note">実現損益は税引前・配当は税引後</span></div><div class="card" style="overflow-x:auto"><table><tr><th>年</th><th>国内現物</th><th>国内信用</th><th>米国株</th><th>投信</th><th>配当</th></tr>`+
+    A.years.map(y=>`<tr><td>${esc(y.y)}</td>${["jp_spot","jp_margin","us","fund"].map(k=>`<td class="${cls(y[k])}">${y[k]==null?"—":sgn(y[k])}</td>`).join("")}<td>${y.div==null?"—":fmt(y.div)}</td></tr>`).join("")+`</table></div>`;
+  const bl=A.bank.at(-1);
+  h+=`<div class="gh"><span>円普通預金（銀行）</span><span>${bl?yen(bl.b):"未取得"}</span></div><div class="note">${bl?`${esc(bl.d)} の残高。`:""}入出金の明細（振込の相手の名前などが入る欄）はアプリに載せていません。</div>`;
+  h+=`<p class="note" style="margin-top:20px">元データ：asset_data.db（SBI証券・ドコモSMTBネット銀行のCSVと画面のコピー）。値は記帳アプリの表示と同じ計算です。作成 ${esc(A.made)}</p>`;
+  $("#main").innerHTML=h; bindSeg();
+  $("#totc").onclick=()=>detail(A.total_item.id);
+  document.querySelectorAll(".hl").forEach(c=>c.onclick=()=>c.classList.toggle("open"));
+  window.scrollTo(0,0);
+}
+
 // ---------- 詳細 ----------
-function findItem(id){ for(const c of D.cats) for(const it of c.items) if(it.id===id) return it; }
+function findItem(id){ if(D.asset&&D.asset.total_item.id===id) return D.asset.total_item; for(const c of D.cats) for(const it of c.items) if(it.id===id) return it; }
 function detail(id){
   const it=findItem(id); cur=it;
   $("#hdr").innerHTML=`<button class="back" id="bk">‹ 一覧</button><h1>${esc(it.title)}</h1>`;
   $("#bk").onclick=home;
   if(it.kind==="weights"){
-    const rows=it.rows||[];
-    $("#main").innerHTML=`<p class="note">市場日 ${esc(it.date||"")} ／ 公式基準 ${esc(it.base_date||"")}</p>
-      <table><tr><th>順位</th><th>コード・銘柄</th><th>ウエート</th><th>前日差</th></tr>${rows.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[1])}<div class="note">${esc(r[2])}${r[3]?" ／ "+esc(r[3]):""}</div></td><td>${Number(r[4]).toFixed(4)}%</td><td class="${r[5]>0?"up":r[5]<0?"dn":""}">${r[5]==null?"—":(r[5]>0?"+":"")+Number(r[5]).toFixed(4)+"pt"}</td></tr>`).join("")}</table>
-      <p class="note">${esc(it.method||"")}。公式の日次全225ウエートではなく推計値です。</p>`; return;
+    const rows=it.rows||[], c=it.contrib||{}, yen=v=>v==null?"未取得":(v>0?"+":"")+fmt(Math.round(v))+"円", pct=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(2)+"%";
+    const cr=rows.filter(r=>r[7]!=null).sort((a,b)=>b[7]-a[7]);
+    const li=r=>`<tr><td>${esc(r[2])}<div class="note">${esc(r[1])}　${pct(r[6])}</div></td><td class="${r[7]>0?"up":r[7]<0?"dn":""}">${yen(r[7])}</td></tr>`;
+    let h=`<p class="note">市場日 ${esc(it.date||"")} ／ 公式基準 ${esc(it.base_date||"")}</p>`;
+    if(cr.length){
+      h+=`<div class="card"><div class="note">寄与度（${esc(c.from||"")} → ${esc(c.to||"")}）</div>
+        <div class="kv"><span>日経平均の値動き</span><b class="${c.nikkei_change>0?"up":c.nikkei_change<0?"dn":""}">${yen(c.nikkei_change)}</b></div>
+        <div class="kv"><span>225銘柄の寄与度の合計<small>実際との差 ${yen(c.gap)}（推計のずれ）</small></span><b>${yen(c.sum)}</b></div></div>
+        <div class="gh"><span>押し上げ 上位10</span><span></span></div><table>${cr.slice(0,10).filter(r=>r[7]>0).map(li).join("")||'<tr><td class="note">ありません</td></tr>'}</table>
+        <div class="gh"><span>押し下げ 上位10</span><span></span></div><table>${cr.slice(-10).reverse().filter(r=>r[7]<0).map(li).join("")||'<tr><td class="note">ありません</td></tr>'}</table>
+        <div class="gh"><span>全銘柄</span><span></span></div>`;
+    }
+    h+=`<table><tr><th>順位</th><th>コード・銘柄</th><th>ウエート<div class="note">前日差</div></th><th>寄与度<div class="note">騰落率</div></th></tr>${rows.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[1])}<div class="note">${esc(r[2])}${r[3]?" ／ "+esc(r[3]):""}</div></td><td>${Number(r[4]).toFixed(4)}%<div class="note ${r[5]>0?"up":r[5]<0?"dn":""}">${r[5]==null?"—":(r[5]>0?"+":"")+Number(r[5]).toFixed(4)+"pt"}</div></td><td class="${r[7]>0?"up":r[7]<0?"dn":""}">${r[7]==null?"—":yen(r[7])}<div class="note">${pct(r[6])}</div></td></tr>`).join("")}</table>
+      <p class="note">${esc(it.method||"")}。公式の日次全225ウエートではなく推計値です。${cr.length?esc(c.method||"")+"。日経平均は"+esc(c.nikkei_source||"")+"。取引時間中に更新した日は、その時点の値です。":""}</p>`;
+    $("#main").innerHTML=h; return;
   }
   if(it.kind==="snapshot"){
     $("#main").innerHTML=`<table><tr><th>銘柄</th><th>価格</th><th>取得時刻</th></tr>${it.rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${fmt(r[1])}</td><td style="font-size:11px">${esc(r[2])}</td></tr>`).join("")}</table>
