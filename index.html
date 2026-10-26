@@ -144,7 +144,7 @@ let TAB="flow";
 let SEC=localStorage.getItem("app_sec")||"macro";
 function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
-function tabs(){ return `<div class="tabs">${[["flow","1か月の傾向"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||D.flow).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function tabs(){ return `<div class="tabs">${[["flow","1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
 const LVC=l=>"l"+l;
 function condCard(r,opts={}){
@@ -175,6 +175,30 @@ function flowView(){
   h+=`<p class="note" style="margin-top:16px">決め方：${esc(f.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
   return h;
 }
+function sectorView(){
+  const S=D.sector, st=S.stage, col={"0":"#d6b25e","1":"#e0727a","2":"#8bb7e0","3":"#5fbf8f","4":"#3fbf7f","9":"#8b95a3"};
+  const f=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1)+"%", cl=v=>v>0?"up":v<0?"dn":"";
+  let h=`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
+    <div style="text-align:center;margin:8px 0 0"><span class="lv" style="font-size:20px;padding:4px 16px;border-radius:14px;background:${col[st.id]};color:#111">${esc(st.label)}</span></div>
+    <div class="meter">${[0,1,2,3,4].map(k=>`<div style="${k===st.id?"background:"+col[k]:""}"></div>`).join("")}</div>
+    <div class="mlab"><span>崩れ始め</span><span>弱さ継続</span><span>先行転換</span><span>買い場</span><span>強さ継続</span></div>
+    <div class="note" style="margin-top:8px">${esc(st.action)}</div>
+    <div class="note" style="margin-top:4px">ディフェンシブ（食料品・電気ガス）で対TOPIXがプラス：${S.defense_plus}／2${S.defense_plus===2?"（半導体が下げている週の形）":S.defense_plus===0?"（ディフェンシブからお金が抜けている形）":""}</div></div>`;
+  h+=`<div class="cat">注目の6系列</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th><th>象限</th></tr>${S.focus.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td><td style="font-size:11px">${esc(r.quad)}</td></tr>`).join("")}</table></div>`;
+  const all=S.rows.filter(r=>r.prev!=null&&r.now!=null), mx=Math.max(4,...all.map(r=>Math.max(Math.abs(r.prev),Math.abs(r.now))))*1.1, W=340, sc=v=>W/2+v/mx*(W/2-14);
+  h+=`<div class="cat">33業種＋2644の4象限（横＝先週・縦＝今週）</div><div class="card"><svg viewBox="0 0 ${W} ${W}" style="width:100%;height:auto">
+    <line x1="${W/2}" y1="0" x2="${W/2}" y2="${W}" stroke="#555"/><line x1="0" y1="${W/2}" x2="${W}" y2="${W/2}" stroke="#555"/>
+    <text x="4" y="12" font-size="9" fill="#999">左上 プラス転換</text><text x="${W-4}" y="12" font-size="9" fill="#999" text-anchor="end">右上 強さ継続</text>
+    <text x="4" y="${W-4}" font-size="9" fill="#999">左下 弱さ継続</text><text x="${W-4}" y="${W-4}" font-size="9" fill="#999" text-anchor="end">右下 マイナス転換</text>
+    ${all.map(r=>{const x=sc(r.prev),y=W-sc(r.now),c=r.now>0?(r.prev>0?"#3fbf7f":"#8bb7e0"):(r.prev>0?"#d6b25e":"#e0727a");return `<circle cx="${x}" cy="${y}" r="${r.focus?5:3}" fill="${c}"/>${r.focus?`<text x="${x+6}" y="${y+3}" font-size="10" fill="#ddd">${esc(r.name)}</text>`:""}`}).join("")}</svg>
+    <div class="note">目盛り：中心から端まで ±${mx.toFixed(1)}%。名前つきは注目の6系列</div></div>`;
+  h+=`<div class="cat">ディフェンシブの物差し（${esc(S.since)}以降）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">業種</th><th>今週</th><th>2644が下げた週に<br>プラス</th><th>下げなかった週に<br>プラス</th></tr>${S.defense.map(d=>`<tr><td>${esc(d.name)}</td><td class="${cl(d.now)}">${f(d.now)}</td><td>${d.down}%<div class="note">${esc(d.down_n)}</div></td><td>${d.up}%<div class="note">${esc(d.up_n)}</div></td></tr>`).join("")}</table></div>`;
+  h+=`<div class="cat">段階ごとの、その後4週の2644（対TOPIX）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">段階</th><th>回数</th><th>平均</th><th>プラスの割合</th></tr>${S.stage_stats.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.count}</td><td class="${cl(s.avg)}">${f(s.avg)}</td><td>${s.win==null?"—":s.win+"%"}</td></tr>`).join("")}</table><div class="note">全部の週の平均 ${f(S.stage_base)}。回数が少ないので参考</div></div>`;
+  h+=`<div class="cat">直近8週の段階</div><div class="card">${S.history.slice().reverse().map(x=>`<div class="row"><span class="note">${esc(x.week)}</span><span>${esc(x.label)}</span></div>`).join("")}</div>`;
+  h+=`<div class="cat">33業種＋2644（今週の対TOPIXの高い順）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th></tr>${S.rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td></tr>`).join("")}</table></div>`;
+  h+=`<p class="note" style="margin-top:16px">決め方：${esc(S.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
+  return h;
+}
 function perfView(){
   const f=D.flow;
   const up=f.all.filter(r=>r.level>0), dn=f.all.filter(r=>r.level<0);
@@ -187,9 +211,10 @@ function home(){
   $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
   $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
   if(SEC==="asset"&&D.asset){ assetView(); return; }
-  if(!D.flow) TAB="list";
+  if((TAB==="flow"||TAB==="perf")&&!D.flow) TAB=D.sector?"sector":"list";
+  if(TAB==="sector"&&!D.sector) TAB=D.flow?"flow":"list";
   if(TAB!=="list"){
-    $("#main").innerHTML=seg()+tabs()+(TAB==="flow"?flowView():perfView());
+    $("#main").innerHTML=seg()+tabs()+(TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
     bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); window.scrollTo(0,0); return;
   }
   let h=seg()+tabs();
