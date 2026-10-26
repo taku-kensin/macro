@@ -158,7 +158,7 @@ function condCard(r,opts={}){
 }
 function flowView(){
   const f=D.flow; const c=f.counts;
-  let h=`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
+  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
     <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>
     <div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
     <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
@@ -175,13 +175,19 @@ function flowView(){
   h+=`<p class="note" style="margin-top:16px">決め方：${esc(f.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
   return h;
 }
+function guideCard(){
+  const G=D.guide; if(!G) return "";
+  return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">マクロの判定＋業種の流れ</span></div>
+    ${G.lines.map(x=>`<div style="margin-top:8px"><div class="note">${esc(x.k)}${x.state?"：<b style=\"color:var(--fg,#ddd)\">"+esc(x.state)+"</b>":""}</div><div>→ ${esc(x.do)}</div></div>`).join("")}
+    <div class="note" style="margin-top:10px">${esc(G.note)}</div></div>`;
+}
 function sectorView(){
-  const S=D.sector, st=S.stage, col={"0":"#d6b25e","1":"#e0727a","2":"#8bb7e0","3":"#5fbf8f","4":"#3fbf7f","9":"#8b95a3"};
+  const S=D.sector, st=S.stage, col={"0":"#d6b25e","1":"#e0727a","2":"#3fbf7f","3":"#8bb7e0","4":"#5fbf8f","9":"#8b95a3"};
   const f=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1)+"%", cl=v=>v>0?"up":v<0?"dn":"";
-  let h=`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
+  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
     <div style="text-align:center;margin:8px 0 0"><span class="lv" style="font-size:20px;padding:4px 16px;border-radius:14px;background:${col[st.id]};color:#111">${esc(st.label)}</span></div>
     <div class="meter">${[0,1,2,3,4].map(k=>`<div style="${k===st.id?"background:"+col[k]:""}"></div>`).join("")}</div>
-    <div class="mlab"><span>崩れ始め</span><span>弱さ継続</span><span>先行転換</span><span>買い場</span><span>強さ継続</span></div>
+    <div class="mlab"><span>様子見</span><span>弱さ継続</span><span>買い場</span><span>追いかけ</span><span>強さ継続</span></div>
     <div class="note" style="margin-top:8px">${esc(st.action)}</div>
     <div class="note" style="margin-top:4px">ディフェンシブ（食料品・電気ガス）で対TOPIXがプラス：${S.defense_plus}／2${S.defense_plus===2?"（半導体が下げている週の形）":S.defense_plus===0?"（ディフェンシブからお金が抜けている形）":""}</div></div>`;
   h+=`<div class="cat">注目の6系列</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th><th>象限</th></tr>${S.focus.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td><td style="font-size:11px">${esc(r.quad)}</td></tr>`).join("")}</table></div>`;
