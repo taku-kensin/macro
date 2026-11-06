@@ -93,6 +93,18 @@ td:first-child,th:first-child{text-align:left;font-family:inherit}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let D=null, cur=null, range="1Y", sel={};
+// v1.7 指標の詳しい画面に重ねる日経225先物の線（最初は表示。チェックを外すと次からも消えたまま）
+let FUT=localStorage.getItem("macro_fut")!=="0";
+const FUTC="#6aa9e9";
+function futSeries(){ if(!D) return null; if(D._fut!==undefined) return D._fut; let f=null;
+  for(const c of D.cats) for(const it of c.items){
+    if(it.kind!=="ts"||!String(it.id).startsWith("D_先物_日次|")||!/日経225/.test(it.title)) continue;
+    const s=it.series.find(s=>s.name==="終値")||it.series[0]; if(!s) continue;
+    const g={id:it.id,x:[],t:[],v:[]}; it.x.forEach((x,i)=>{ if(x&&s.v[i]!=null){ g.x.push(x); g.t.push(new Date(x).getTime()); g.v.push(s.v[i]); } });
+    if(!f||g.v.length>f.v.length) f=g; }
+  D._fut=f&&f.v.length>1?f:null; return D._fut; }
+function futAt(F,t){ let lo=0,hi=F.t.length-1; if(t<=F.t[0]) return 0; if(t>=F.t[hi]) return hi;
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(F.t[m]<=t) lo=m; else hi=m; } return (t-F.t[lo]<=F.t[hi]-t)?lo:hi; }
 const RANGES=[["1M","1か月",30],["3M","3か月",91],["6M","6か月",182],["1Y","1年",365],["2Y","2年",730],["5Y","5年",1826],["ALL","全期間",1e6]];
 
 function fmt(v){ if(v==null||isNaN(v))return "—"; const a=Math.abs(v);
@@ -159,7 +171,7 @@ function condCard(r,opts={}){
 function flowView(){
   const f=D.flow; const c=f.counts;
   let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
-    <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>
+    <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>${D.level?`<div class="note" style="margin-top:4px;color:var(--accent)">※恐怖の指標が中心の、前からの判定（参考）。新しい判定は一番上の「相場の段階」です</div>`:""}
     <div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
     <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
     <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>
@@ -175,6 +187,34 @@ function flowView(){
   h+=`<p class="note" style="margin-top:16px">決め方：${esc(f.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
   return h;
 }
+// v1.8 2026/11/06 相場の段階（買いやすさ1〜5）。マクロの画面の一番上に出す。押すと中身が開く
+const LVCOL={5:"#3fbf7f",4:"#5fbf8f",3:"#8b95a3",2:"#e8a35a",1:"#e0727a"};
+function lvRes(s){ return s&&s.n?`過去${s.n}回中${s.up}回、1か月後に上がった・途中の一番深い下げ ${s.worst}%${s.ref?"（例が少ないので参考）":""}`:"過去の例はまだありません"; }
+function levelCard(){
+  const L=D.level; if(!L) return "";
+  const col=LVCOL[L.level]||"#8b95a3", cur=L.stats.find(s=>s.key===L.key);
+  const sec=L.sector?(L.sector.buy?"買い場":L.sector.stage):"未取得";
+  return `<div class="card lvc" id="lvc" style="border:2px solid ${col}">
+    <div class="row"><span class="note">相場の段階（${esc(L.date)}の終値まで）</span><span class="note">買いやすさ 1〜5</span></div>
+    <div style="display:flex;align-items:center;gap:14px;margin:8px 0 2px">
+      <div style="font-size:46px;font-weight:700;line-height:1;color:${col};font-family:var(--num)">${L.level}</div>
+      <div><div style="font-size:23px;font-weight:700;color:${col}">${esc(L.label)}</div><div class="note">${esc(L.one)}</div></div></div>
+    <div class="meter">${[1,2,3,4,5].map(k=>`<div style="${k===L.level?"background:"+LVCOL[k]:""}"></div>`).join("")}</div>
+    <div class="mlab"><span>1 上がりすぎ</span><span>2 急落中</span><span>3 ふつう</span><span>4 買い場</span><span>5 強</span></div>
+    <div class="note" style="margin-top:8px">${cur?esc(lvRes(cur)):"ふだんどおり（ふだんは約"+L.base.up+"%が1か月後に上がる）"}</div>
+    <div class="note" style="margin-top:4px">${L.checks.map(c=>`<span style="white-space:nowrap">${c.on?"○":"－"} ${esc(c.name)}</span>`).join("　")}　<span style="white-space:nowrap">業種の流れ：${esc(sec)}</span>　<span style="color:var(--accent);white-space:nowrap">詳しく ›</span></div>
+    <div class="more">
+      ${L.checks.map(c=>`<div style="margin-top:6px"><b>${c.on?"○":"－"} ${esc(c.name)}</b>${c.missing?"（データが古い）":""}<div class="note">${esc(c.detail)}</div></div>`).join("")}
+      <div style="margin-top:6px"><b>${L.hot.on?"○":"－"} 上がりすぎ</b><div class="note">${esc(L.hot.detail)}</div></div>
+      <div style="margin-top:6px"><b>業種の流れ：${esc(sec)}</b><div class="note">${L.sector?esc(L.sector.week+"の週 "+L.sector.stage+"（直近："+L.sector.recent.map(x=>x.week+" "+x.stage).join("・")+"）"):"cache_sector が見つかりません"}</div></div>
+      <div style="margin-top:10px;overflow-x:auto"><table><tr><th>段階</th><th style="text-align:left">表示</th><th>1か月後に上がった</th><th>途中の最悪</th></tr>
+        ${L.stats.map(s=>`<tr style="${s.key===L.key?"font-weight:700":""}"><td style="color:${LVCOL[s.level]}">${s.level}</td><td style="text-align:left">${esc(s.label)}${s.ref?"<div class='note'>参考</div>":""}</td><td>${s.n?s.up+"／"+s.n+"回":"—"}</td><td>${s.worst==null?"—":s.worst+"%"}</td></tr>`).join("")}
+        <tr><td>—</td><td style="text-align:left">ふだん</td><td>約${L.base.up}%</td><td>—</td></tr></table></div>
+      <div class="note" style="margin-top:8px">直近：${L.history.map(x=>esc(x.date)+" "+x.level).join("・")}</div>
+      <div class="note" style="margin-top:6px">${esc(L.rule)}。過去の結果であり、この先を約束するものではありません。</div>
+    </div></div>`;
+}
+function bindLevel(){ const c=$("#lvc"); if(c) c.onclick=()=>c.classList.toggle("open"); }
 function guideCard(){
   const G=D.guide; if(!G) return "";
   return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">マクロの判定＋業種の流れ</span></div>
@@ -220,10 +260,10 @@ function home(){
   if((TAB==="flow"||TAB==="perf")&&!D.flow) TAB=D.sector?"sector":"list";
   if(TAB==="sector"&&!D.sector) TAB=D.flow?"flow":"list";
   if(TAB!=="list"){
-    $("#main").innerHTML=seg()+tabs()+(TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
-    bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); window.scrollTo(0,0); return;
+    $("#main").innerHTML=seg()+levelCard()+tabs()+(TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
+    bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); bindLevel(); window.scrollTo(0,0); return;
   }
-  let h=seg()+tabs();
+  let h=seg()+levelCard()+tabs();
   for(const c of D.cats){
     h+=`<div class="cat">${esc(c.title)}</div>`;
     for(const it of c.items){
@@ -240,7 +280,7 @@ function home(){
     }
   }
   h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
-  $("#main").innerHTML=h; bindTabs(); bindSeg();
+  $("#main").innerHTML=h; bindTabs(); bindSeg(); bindLevel();
   document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
   window.scrollTo(0,0);
 }
@@ -387,8 +427,10 @@ function detail(id){
   if(!sel[id]) sel[id]=[...it.defaults];
   $("#main").innerHTML=`<div class="ranges" id="rg">${RANGES.map(r=>`<button data-r="${r[0]}" class="${r[0]===range?"on":""}">${r[1]}</button>`).join("")}</div>
     <div class="chips" id="ch">${it.series.map(s=>`<button class="chip ${sel[id].includes(s.name)?"on":""}" data-n="${esc(s.name)}">${esc(s.name)}</button>`).join("")}</div>
+    ${(()=>{ const fs=futSeries(); return fs&&fs.id!==it.id?`<label class="note" style="display:flex;align-items:center;gap:6px;margin:0 0 4px"><input type="checkbox" id="fut" ${FUT?"checked":""}><span style="display:inline-block;width:18px;height:2px;background:${FUTC}"></span>日経225先物の線を重ねる</label>`:""; })()}
     <div id="charts"></div>`;
   $("#rg").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; range=b.dataset.r; detail(id); };
+  if($("#fut")) $("#fut").onchange=e=>{ FUT=e.target.checked; localStorage.setItem("macro_fut",FUT?"1":"0"); drawAll(it); };
   $("#ch").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; const n=b.dataset.n, a=sel[id];
     if(a.includes(n)){ if(a.length>1) a.splice(a.indexOf(n),1); } else a.push(n); detail(id); };
   drawAll(it);
@@ -402,6 +444,7 @@ function windowIdx(it){
 }
 function drawAll(it){
   const i0=windowIdx(it); const box=$("#charts"); box.innerHTML="";
+  const fs=futSeries(), F=(FUT&&fs&&fs.id!==it.id)?fs:null;
   const charts=[];
   for(const name of sel[it.id]){
     const s=it.series.find(s=>s.name===name); if(!s) continue;
@@ -411,11 +454,11 @@ function drawAll(it){
     const ch=it.flow?pts.reduce((a,q)=>a+q[1],0):(last&&first?last[1]-first[1]:null), cp=(!it.flow&&last&&first)?pct(last[1],first[1]):null;
     div.innerHTML=`<div class="hd"><span>${esc(name)}</span><span class="val">${last?fmt(last[1]):"—"}</span></div>
       <div class="hd"><span class="when">${last?esc(last[0]):"この期間にデータがありません"}</span>
-      <span class="chg ${ch>0?"up":ch<0?"dn":"mute"}">${ch==null?"":`${it.flow?"期間の合計":"期間の変化"} ${ch>0?"+":""}${fmt(ch)}${cp==null?"":`（${cp>0?"+":""}${cp.toFixed(1)}%）`}`}</span></div><canvas></canvas>`;
+      <span class="chg ${ch>0?"up":ch<0?"dn":"mute"}">${ch==null?"":`${it.flow?"期間の合計":"期間の変化"} ${ch>0?"+":""}${fmt(ch)}${cp==null?"":`（${cp>0?"+":""}${cp.toFixed(1)}%）`}`}</span></div>${F?`<div class="fl" style="color:${FUTC};font-size:11px;font-family:var(--num);min-height:14px"></div>`:""}<canvas></canvas>`;
     box.appendChild(div);
     charts.push({div,pts,cv:div.querySelector("canvas"),name});
   }
-  const paint=(hx)=>charts.forEach(c=>plot(c,hx,it.period,it.flow));
+  const paint=(hx)=>charts.forEach(c=>plot(c,hx,it.period,it.flow,F));
   paint(null);
   charts.forEach(c=>{
     const mv=e=>{ const r=c.cv.getBoundingClientRect(); const t=(e.touches?e.touches[0]:e); paint((t.clientX-r.left)/r.width); };
@@ -424,7 +467,7 @@ function drawAll(it){
     c.cv.addEventListener("touchend",()=>setTimeout(()=>paint(null),1500));
   });
 }
-function plot(c,hx,period,flow){
+function plot(c,hx,period,flow,F){
   const cv=c.cv, dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=170;
   cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
   const p=c.pts; if(p.length===0) return;
@@ -441,7 +484,17 @@ function plot(c,hx,period,flow){
   if(bars){ const bw=Math.max(1,(W-L-R)/p.length*.7);
     p.forEach((q,i)=>{ g.fillStyle=q[1]>=0?"#5fbf8f":"#e0727a"; const y=Y(q[1]), z=Y(Math.max(y0,Math.min(y1,0)));
       g.fillRect(X(xs[i])-bw/2,Math.min(y,z),bw,Math.max(1,Math.abs(z-y))); }); }
-  else{ g.strokeStyle="#d6b25e"; g.lineWidth=1.6; g.beginPath(); p.forEach((q,i)=>{ const x=X(xs[i]), y=Y(q[1]); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke(); }
+  let fi=null;
+  if(F){ const a=F.t.findIndex(t=>t>=x0); let b=-1; for(let i=F.t.length-1;i>=0;i--) if(F.t[i]<=x1){ b=i; break; }
+    if(a>=0&&b>a){ let f0=Infinity,f1=-Infinity; for(let i=a;i<=b;i++){ if(F.v[i]<f0) f0=F.v[i]; if(F.v[i]>f1) f1=F.v[i]; }
+      if(f0===f1){ f0-=1; f1+=1; } const fp=(f1-f0)*.06; f0-=fp; f1+=fp; const FY=v=>T+(H-T-B)*(1-(v-f0)/(f1-f0));
+      g.save(); g.strokeStyle=FUTC; g.globalAlpha=.85; g.lineWidth=1.2; g.beginPath();
+      for(let i=a;i<=b;i++){ const x=X(F.t[i]), y=FY(F.v[i]); i>a?g.lineTo(x,y):g.moveTo(x,y); } g.stroke(); g.restore(); fi=[a,b]; } }
+  if(!bars){ g.strokeStyle="#d6b25e"; g.lineWidth=1.6; g.beginPath(); p.forEach((q,i)=>{ const x=X(xs[i]), y=Y(q[1]); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke(); }
+  const fl=c.div.querySelector(".fl");
+  if(fl){ if(!fi) fl.textContent="日経225先物：この期間のデータがありません"; else {
+    const k=hx!=null?Math.max(fi[0],Math.min(fi[1],futAt(F,xs[(()=>{ const tx=x0+(x1-x0)*Math.max(0,Math.min(1,(hx*W-L)/(W-L-R))); let kk=0,bb=1e99; xs.forEach((t,i)=>{ const d=Math.abs(t-tx); if(d<bb){bb=d;kk=i;} }); return kk; })()]))):fi[1];
+    fl.textContent=`日経225先物 ${fmt(F.v[k])}（${F.x[k]}）`; } }
   if(hx!=null){ const tx=x0+(x1-x0)*Math.max(0,Math.min(1,(hx*W-L)/(W-L-R)));
     let k=0,best=1e99; xs.forEach((t,i)=>{ const d=Math.abs(t-tx); if(d<best){best=d;k=i;} });
     const x=X(xs[k]), y=Y(p[k][1]); g.strokeStyle="#8b95a3"; g.lineWidth=1; g.beginPath(); g.moveTo(x,T); g.lineTo(x,H-B); g.stroke();
