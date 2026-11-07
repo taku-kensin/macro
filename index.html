@@ -21,7 +21,7 @@ header{position:sticky;top:0;z-index:5;background:rgba(18,21,26,.94);backdrop-fi
 header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header .sub{color:var(--mute);font-size:11px}
 .back{background:none;border:0;color:var(--accent);font-size:16px;padding:4px 6px 4px 0}
-main{padding:12px 14px 40px}
+main{padding:12px 14px 40px;max-width:860px;margin:0 auto}
 .cat{margin:18px 0 6px;color:var(--accent);font-size:12px;letter-spacing:.14em}
 .item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0}
 .item .t{font-size:15px}
@@ -156,7 +156,7 @@ let TAB="flow";
 let SEC=localStorage.getItem("app_sec")||"macro";
 function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
-function tabs(){ return `<div class="tabs">${[["flow","1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function tabs(){ return `<div class="tabs">${[["flow",D.level?"1か月の傾向（参考）":"1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
 const LVC=l=>"l"+l;
 function condCard(r,opts={}){
@@ -172,9 +172,9 @@ function flowView(){
   const f=D.flow; const c=f.counts;
   let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
     <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>${D.level?`<div class="note" style="margin-top:4px;color:var(--accent)">※恐怖の指標が中心の、前からの判定（参考）。新しい判定は一番上の「相場の段階」です</div>`:""}
-    <div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
+    ${D.level?`<div class="row" style="margin-top:8px"><span class="note">前からの判定（恐怖の指標だけの参考）</span><span class="lv" style="background:var(--panel2);color:var(--mute)">${esc(f.overall_label)}</span></div>`:`<div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
     <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
-    <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>
+    <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>`}
     <div class="note" style="margin-top:8px">上がりやすい側 ${c.up}／下がりやすい側 ${c.down}${c.stale?`／データが古く除外 ${c.stale}`:""}</div></div>`;
   h+=`<div class="cat">成り立っている条件</div>`+(f.lit.length?f.lit.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
   h+=`<div class="cat">もう少しで成り立つ条件</div>`+(f.near.length?f.near.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
@@ -217,7 +217,7 @@ function levelCard(){
 function bindLevel(){ const c=$("#lvc"); if(c) c.onclick=()=>c.classList.toggle("open"); }
 function guideCard(){
   const G=D.guide; if(!G) return "";
-  return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">マクロの判定＋業種の流れ</span></div>
+  return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">${D.level?"相場の段階＋業種の流れ":"マクロの判定＋業種の流れ"}</span></div>
     ${G.lines.map(x=>`<div style="margin-top:8px"><div class="note">${esc(x.k)}${x.state?"：<b style=\"color:var(--fg,#ddd)\">"+esc(x.state)+"</b>":""}</div><div>→ ${esc(x.do)}</div></div>`).join("")}
     <div class="note" style="margin-top:10px">${esc(G.note)}</div></div>`;
 }
