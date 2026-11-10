@@ -292,11 +292,12 @@ function guideCard(){
 function sectorView(){
   const S=D.sector, st=S.stage, col={"0":"#d6b25e","1":"#e0727a","2":"#3fbf7f","3":"#8bb7e0","4":"#5fbf8f","9":"#8b95a3"};
   const f=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1)+"%", cl=v=>v>0?"up":v<0?"dn":"";
-  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
+  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週${S.partial?"（今週は途中）":""}（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
     <div style="text-align:center;margin:8px 0 0"><span class="lv" style="font-size:20px;padding:4px 16px;border-radius:14px;background:${col[st.id]};color:#111">${esc(st.label)}</span></div>
     <div class="meter">${[0,1,2,3,4].map(k=>`<div style="${k===st.id?"background:"+col[k]:""}"></div>`).join("")}</div>
     <div class="mlab"><span>様子見</span><span>弱さ継続</span><span>買い場</span><span>追いかけ</span><span>強さ継続</span></div>
     <div class="note" style="margin-top:8px">${esc(st.action)}</div>
+    ${S.partial?`<div class="note" style="margin-top:6px;padding:6px 8px;border:1px solid #d6b25e;border-radius:8px;color:#d6b25e">この段階は ${esc(S.stage_week)} の週末に決まった物です。今週は途中（${esc(S.partial.last_day)}まで）で、今のところ「${esc(S.partial.label)}」。週の終わりに決まるので、まだ使いません。下の表の「今週」も途中の値です</div>`:""}
     <div class="note" style="margin-top:4px">ディフェンシブ（食料品・電気ガス）で対TOPIXがプラス：${S.defense_plus}／2${S.defense_plus===2?"（半導体が下げている週の形）":S.defense_plus===0?"（ディフェンシブからお金が抜けている形）":""}</div></div>`;
   h+=`<div class="cat">注目の6系列</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th><th>象限</th></tr>${S.focus.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td><td style="font-size:11px">${esc(r.quad)}</td></tr>`).join("")}</table></div>`;
   const all=S.rows.filter(r=>r.prev!=null&&r.now!=null), mx=Math.max(4,...all.map(r=>Math.max(Math.abs(r.prev),Math.abs(r.now))))*1.1, W=340, sc=v=>W/2+v/mx*(W/2-14);
@@ -308,7 +309,7 @@ function sectorView(){
     <div class="note">目盛り：中心から端まで ±${mx.toFixed(1)}%。名前つきは注目の6系列</div></div>`;
   h+=`<div class="cat">ディフェンシブの物差し（${esc(S.since)}以降）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">業種</th><th>今週</th><th>2644が下げた週に<br>プラス</th><th>下げなかった週に<br>プラス</th></tr>${S.defense.map(d=>`<tr><td>${esc(d.name)}</td><td class="${cl(d.now)}">${f(d.now)}</td><td>${d.down}%<div class="note">${esc(d.down_n)}</div></td><td>${d.up}%<div class="note">${esc(d.up_n)}</div></td></tr>`).join("")}</table></div>`;
   h+=`<div class="cat">段階ごとの、その後4週の2644（対TOPIX）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">段階</th><th>回数</th><th>平均</th><th>プラスの割合</th></tr>${S.stage_stats.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.count}</td><td class="${cl(s.avg)}">${f(s.avg)}</td><td>${s.win==null?"—":s.win+"%"}</td></tr>`).join("")}</table><div class="note">全部の週の平均 ${f(S.stage_base)}。回数が少ないので参考</div></div>`;
-  h+=`<div class="cat">直近8週の段階</div><div class="card">${S.history.slice().reverse().map(x=>`<div class="row"><span class="note">${esc(x.week)}</span><span>${esc(x.label)}</span></div>`).join("")}</div>`;
+  h+=`<div class="cat">直近8週の段階</div><div class="card">${S.history.slice().reverse().map(x=>`<div class="row"><span class="note">${esc(x.week)}${x.partial?"（途中）":""}</span><span${x.partial?' class="mute"':""}>${esc(x.label)}</span></div>`).join("")}</div>`;
   h+=`<div class="cat">33業種＋2644（今週の対TOPIXの高い順）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th></tr>${S.rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td></tr>`).join("")}</table></div>`;
   h+=`<p class="note" style="margin-top:16px">決め方：${esc(S.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
   return h;
