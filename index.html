@@ -216,11 +216,45 @@ function levelCard(){
     </div></div>`;
 }
 function bindLevel(){ const c=$("#lvc"); if(c) c.onclick=()=>c.classList.toggle("open"); }
+// v1.11 2026/11/10 価格帯ごとの厚さ：その値段でどれだけ売買されたか（過去1年・直近60日）と建玉を横棒にし、売買の薄い帯を「滑りやすい」と色で出す
+function profileCard(col){
+  const F=D.level.profile, f=v=>Math.round(v).toLocaleString();
+  const bgOf=z=>z.cls==="thin"?"rgba(214,178,94,.22)":z.cls==="thick"?(z.now?"rgba(139,149,163,.22)":z.lo>F.price?"rgba(224,114,122,.18)":"rgba(95,191,143,.18)"):"transparent";
+  const fgOf=z=>z.cls==="thin"?"#d6b25e":z.cls==="thick"?(z.now?"#c9d1d9":z.lo>F.price?col.res:col.sup):"var(--mute)";
+  const isNow=r=>r.b<=F.price&&F.price<r.b+F.step;
+  const labelRow={};
+  F.zones.forEach((z,zi)=>{ const rs=F.rows.filter(r=>z.lo<=r.b&&r.b<z.hi&&!isNow(r)); if(rs.length) labelRow[rs[Math.floor((rs.length-1)/2)].b]=zi; });
+  let h=`<div class="card"><div class="row"><span class="note">${esc(F.date)}の終値 ${f(F.price)}円</span><span class="note">棒が短い所ほど滑りやすい</span></div>
+    <div class="note" style="margin:6px 0 2px"><span style="color:rgba(106,169,233,.7)">■</span> 過去${F.n}日の売買代金　<span style="color:#6aa9e9">■</span> うち直近${F.n60}日　<span style="color:${col.sup}">■</span> プットの建玉　<span style="color:${col.res}">■</span> コールの建玉</div>
+    <div class="note" style="margin:0 0 8px"><span style="background:rgba(214,178,94,.35);padding:0 6px;border-radius:3px">滑りやすい</span>　<span style="background:rgba(95,191,143,.3);padding:0 6px;border-radius:3px">厚い支え</span>　<span style="background:rgba(224,114,122,.3);padding:0 6px;border-radius:3px">厚い抵抗</span></div>
+    <div class="note" style="display:flex;gap:6px;margin-bottom:2px"><div style="width:50px;text-align:right">値段</div><div style="flex:1.5">売買の量</div><div style="flex:.8">建玉</div><div style="width:78px;text-align:center">見立て</div></div>`;
+  for(const r of F.rows){
+    const z=F.zones.find(z=>z.lo<=r.b&&r.b<z.hi)||{cls:"mid"}, now=isNow(r);
+    const lab=now?`いま ${f(F.price)}`:(labelRow[r.b]!=null?F.zones[labelRow[r.b]].label:"");
+    h+=`<div style="display:flex;align-items:center;gap:6px;background:${bgOf(z)};padding:2px 0;${now?"box-shadow:inset 0 2px 0 var(--accent);":""}">
+      <div style="width:50px;text-align:right;font-family:var(--num);font-size:11px;color:var(--mute)">${r.b%1000===0?f(r.b):""}</div>
+      <div style="flex:1.5;position:relative;height:13px"><div style="position:absolute;left:0;top:0;height:13px;width:${Math.min(100,r.v/F.maxv_view*100)}%;background:rgba(106,169,233,.38);border-radius:2px"></div><div style="position:absolute;left:0;top:3px;height:7px;width:${Math.min(100,r.v60/F.maxv_view*100)}%;background:#6aa9e9;border-radius:1px"></div></div>
+      <div style="flex:.8;height:11px"><div style="height:11px;width:${F.maxoi?Math.min(100,r.oi/F.maxoi*100):0}%;background:${r.side==="put"?col.sup:col.res};border-radius:2px"></div></div>
+      <div style="width:78px;text-align:center;font-size:12px;font-weight:700;white-space:nowrap;color:${now?"var(--accent)":fgOf(z)}">${esc(lab)}</div></div>`;
+  }
+  h+=`<div class="note" style="margin-top:8px">値段の数字は、その行の帯の下の端（60,000 の行は 60,000〜${f(60000+F.step)}円）</div>
+    ${F.says.map(x=>`<div style="margin-top:6px;font-size:13px">・${esc(x)}</div>`).join("")}
+    <div class="note" style="margin-top:8px">${esc(F.rule)}</div></div>`;
+  return h;
+}
+function levelsCard(M,col){
+  const f=v=>Math.round(v).toLocaleString(), rs=M.rows.filter(r=>r.kind==="res"||r.kind==="sup"||r.kind==="pivot");
+  if(!rs.length) return "";
+  return `<div class="cat">節目（上から）</div><div class="card">${rs.map(r=>`<div style="display:flex;gap:8px;margin:5px 0;align-items:baseline"><div style="width:96px;text-align:right;font-family:var(--num);font-size:12px;white-space:nowrap">${r.hi===r.lo?f(r.hi):f(r.lo)+"〜"+f(r.hi)}</div><div style="width:52px;font-weight:700;font-size:12px;color:${col[r.kind]||col.run}">${r.kind==="pivot"?"中心":esc(r.title)}</div><div class="note" style="flex:1">${r.why.map(esc).join("<br>")}</div></div>`).join("")}
+    ${M.range1d?`<div class="note" style="margin-top:6px">1日の値幅の目安 約±${f(M.range1d)}円（日経VI ${M.vi}%のままという仮定）</div>`:""}</div>`;
+}
 // v1.9 2026/11/10 値段の地図：オプションの建玉・節目・外資の先物の帯から、支え・抵抗・走りやすい区間を上から順に並べる
 function mapView(){
   const M=D.level.map, f=v=>Math.round(v).toLocaleString(), sg=v=>(v>0?"+":"")+Math.round(v).toLocaleString();
   const col={res:"#e0727a",sup:"#5fbf8f",pivot:"#d6b25e",run:"#8b95a3"};
-  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(M.date)}の終値 ${f(M.price)}円</span><span class="note">${M.range1d?`1日の値幅の目安 約±${f(M.range1d)}円`:""}</span></div>
+  let h=guideCard();
+  if(D.level.profile&&D.level.profile.rows&&D.level.profile.rows.length){ h+=profileCard(col)+levelsCard(M,col); } else {
+  h+=`<div class="card"><div class="row"><span class="note">${esc(M.date)}の終値 ${f(M.price)}円</span><span class="note">${M.range1d?`1日の値幅の目安 約±${f(M.range1d)}円`:""}</span></div>
     <div class="note" style="margin:4px 0 8px"><span style="color:${col.res}">■</span> 上値を抑える所　<span style="color:${col.sup}">■</span> 下で支える所　<span style="color:${col.run}">┄</span> 止まる理由が少なく走りやすい区間</div>`;
   for(const r of M.rows){
     if(r.kind==="now"){ h+=`<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><div style="width:62px;text-align:right;font-family:var(--num);font-weight:700">${f(r.hi)}</div><div style="flex:1;border:2px solid var(--accent);border-radius:14px;padding:3px 12px;font-weight:700;color:var(--accent)">いま</div></div>`; continue; }
@@ -229,6 +263,7 @@ function mapView(){
       <div style="flex:1;border:1px ${r.kind==="run"?"dashed":"solid"} ${c};${r.kind==="run"?"":"border-left-width:5px;"}border-radius:8px;padding:7px 10px"><div style="font-weight:700;color:${c}">${esc(r.title)}</div><div class="note" style="margin-top:2px">${r.why.map(esc).join("<br>")}</div></div></div>`;
   }
   h+=`${M.paths.map(x=>`<div class="note" style="margin-top:6px">${esc(x)}</div>`).join("")}${(M.notes||[]).map(x=>`<div class="note" style="margin-top:6px">${esc(x)}</div>`).join("")}</div>`;
+  }
   const S=D.level.supply||[];
   if(S.length) h+=`<div class="cat">先物・オプションの需給</div><div class="card">${S.map(x=>`<div style="margin:4px 0"><b>${esc(x.k)}</b> <span class="note">（${esc(x.date)}）</span><div class="note">${esc(x.text)}</div></div>`).join("")}</div>`;
   const O=M.option;
