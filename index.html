@@ -152,11 +152,12 @@ function lastVal(it){
   }
   return null;
 }
-let TAB="flow";
+let TAB=null;
 let SEC=localStorage.getItem("app_sec")||"macro";
 function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
-function tabs(){ return `<div class="tabs">${[["flow",D.level?"1か月の傾向（参考）":"1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
+function hasMap(){ return !!(D.level&&D.level.map&&D.level.map.rows&&D.level.map.rows.length); }
+function tabs(){ return `<div class="tabs">${[["map","値段の地図"],["flow",D.level?"1か月の傾向（参考）":"1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="map"?hasMap():t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
 const LVC=l=>"l"+l;
 function condCard(r,opts={}){
@@ -206,7 +207,7 @@ function levelCard(){
     <div class="more">
       ${L.checks.map(c=>`<div style="margin-top:6px"><b>${c.on?"○":"－"} ${esc(c.name)}</b>${c.missing?"（データが古い）":""}<div class="note">${esc(c.detail)}</div></div>`).join("")}
       <div style="margin-top:6px"><b>${L.hot.on?"○":"－"} 上がりすぎ</b><div class="note">${esc(L.hot.detail)}</div></div>
-      <div style="margin-top:6px"><b>業種の流れ：${esc(sec)}</b><div class="note">${L.sector?esc(L.sector.week+"の週 "+L.sector.stage+"（直近："+L.sector.recent.map(x=>x.week+" "+x.stage).join("・")+"）"):"cache_sector が見つかりません"}</div></div>
+      <div style="margin-top:6px"><b>業種の流れ：${esc(sec)}</b><div class="note">${L.sector?esc(L.sector.week+"の週 "+L.sector.stage+"（直近："+L.sector.recent.map(x=>x.week+" "+x.stage).join("・")+"）"+(L.sector.partial?"。今週（"+L.sector.partial.week+"まで）は途中で「"+L.sector.partial.stage+"」。週の終わりに決まるので、まだ使わない":"")):"cache_sector が見つかりません"}</div></div>
       <div style="margin-top:10px;overflow-x:auto"><table><tr><th>段階</th><th style="text-align:left">表示</th><th>1か月後に上がった</th><th>途中の最悪</th></tr>
         ${L.stats.map(s=>`<tr style="${s.key===L.key?"font-weight:700":""}"><td style="color:${LVCOL[s.level]}">${s.level}</td><td style="text-align:left">${esc(s.label)}${s.ref?"<div class='note'>参考</div>":""}</td><td>${s.n?s.up+"／"+s.n+"回":"—"}</td><td>${s.worst==null?"—":s.worst+"%"}</td></tr>`).join("")}
         <tr><td>—</td><td style="text-align:left">ふだん</td><td>約${L.base.up}%</td><td>—</td></tr></table></div>
@@ -215,6 +216,30 @@ function levelCard(){
     </div></div>`;
 }
 function bindLevel(){ const c=$("#lvc"); if(c) c.onclick=()=>c.classList.toggle("open"); }
+// v1.9 2026/11/10 値段の地図：オプションの建玉・節目・外資の先物の帯から、支え・抵抗・走りやすい区間を上から順に並べる
+function mapView(){
+  const M=D.level.map, f=v=>Math.round(v).toLocaleString(), sg=v=>(v>0?"+":"")+Math.round(v).toLocaleString();
+  const col={res:"#e0727a",sup:"#5fbf8f",pivot:"#d6b25e",run:"#8b95a3"};
+  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(M.date)}の終値 ${f(M.price)}円</span><span class="note">${M.range1d?`1日の値幅の目安 約±${f(M.range1d)}円`:""}</span></div>
+    <div class="note" style="margin:4px 0 8px"><span style="color:${col.res}">■</span> 上値を抑える所　<span style="color:${col.sup}">■</span> 下で支える所　<span style="color:${col.run}">┄</span> 止まる理由が少なく走りやすい区間</div>`;
+  for(const r of M.rows){
+    if(r.kind==="now"){ h+=`<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><div style="width:62px;text-align:right;font-family:var(--num);font-weight:700">${f(r.hi)}</div><div style="flex:1;border:2px solid var(--accent);border-radius:14px;padding:3px 12px;font-weight:700;color:var(--accent)">いま</div></div>`; continue; }
+    const c=col[r.kind]||col.run, rng=r.hi===r.lo?f(r.hi):`${f(r.hi)}<br>${f(r.lo)}`;
+    h+=`<div style="display:flex;align-items:stretch;gap:8px;margin:6px 0"><div class="note" style="width:62px;text-align:right;font-family:var(--num);align-self:center;line-height:1.35">${rng}</div>
+      <div style="flex:1;border:1px ${r.kind==="run"?"dashed":"solid"} ${c};${r.kind==="run"?"":"border-left-width:5px;"}border-radius:8px;padding:7px 10px"><div style="font-weight:700;color:${c}">${esc(r.title)}</div><div class="note" style="margin-top:2px">${r.why.map(esc).join("<br>")}</div></div></div>`;
+  }
+  h+=`${M.paths.map(x=>`<div class="note" style="margin-top:6px">${esc(x)}</div>`).join("")}${(M.notes||[]).map(x=>`<div class="note" style="margin-top:6px">${esc(x)}</div>`).join("")}</div>`;
+  const S=D.level.supply||[];
+  if(S.length) h+=`<div class="cat">先物・オプションの需給</div><div class="card">${S.map(x=>`<div style="margin:4px 0"><b>${esc(x.k)}</b> <span class="note">（${esc(x.date)}）</span><div class="note">${esc(x.text)}</div></div>`).join("")}</div>`;
+  const O=M.option;
+  if(O) h+=`<div class="cat">行使価格ごとの建玉（${esc(O.date)}・${esc(O.month)}限${O.sq?"・SQ "+esc(O.sq):""}）</div><div class="card" style="overflow-x:auto"><table><tr><th>プット</th><th>建玉</th><th>前日比</th><th>コール</th><th>建玉</th><th>前日比</th></tr>
+    ${O.puts.map((p,i)=>{ const c=O.calls[i]||{}; return `<tr><td>${f(p.k)}</td><td>${f(p.oi)}</td><td class="mute">${p.chg==null?"—":sg(p.chg)}</td><td>${c.k?f(c.k):"—"}</td><td>${c.k?f(c.oi):"—"}</td><td class="mute">${c.chg==null?"—":sg(c.chg)}</td></tr>`; }).join("")}</table></div>`;
+  const F=M.foreign;
+  if(F&&F.bands.length){ const mx=Math.max(...F.bands.map(b=>Math.abs(b.v)),1);
+    h+=`<div class="cat">価格帯ごとの外資の先物（${esc(F.from)}〜${esc(F.to)}の${F.weeks}週・推計）</div><div class="card">${F.bands.map(b=>`<div style="display:flex;align-items:center;gap:6px;margin:2px 0"><div class="note" style="width:62px;text-align:right;font-family:var(--num)">${f(b.lo)}〜</div><div style="flex:1;display:flex"><div style="flex:1;display:flex;justify-content:flex-end">${b.v<0?`<div style="height:10px;width:${Math.abs(b.v)/mx*100}%;background:${col.res};border-radius:2px"></div>`:""}</div><div style="width:1px;background:var(--line)"></div><div style="flex:1">${b.v>0?`<div style="height:10px;width:${b.v/mx*100}%;background:${col.sup};border-radius:2px"></div>`:""}</div></div><div class="note" style="width:52px;text-align:right;font-family:var(--num)">${sg(b.v)}</div></div>`).join("")}<div class="note" style="margin-top:6px">左（赤）＝その値段の帯で外資が売り越し、右（緑）＝買い越し</div></div>`; }
+  h+=`<p class="note" style="margin-top:10px">${esc(M.rule)}</p>`;
+  return h;
+}
 function guideCard(){
   const G=D.guide; if(!G) return "";
   return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">${D.level?"相場の段階＋業種の流れ":"マクロの判定＋業種の流れ"}</span></div>
@@ -257,10 +282,12 @@ function home(){
   $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
   $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
   if(SEC==="asset"&&D.asset){ assetView(); return; }
+  if(TAB==null) TAB=hasMap()?"map":"flow";
+  if(TAB==="map"&&!hasMap()) TAB="flow";
   if((TAB==="flow"||TAB==="perf")&&!D.flow) TAB=D.sector?"sector":"list";
   if(TAB==="sector"&&!D.sector) TAB=D.flow?"flow":"list";
   if(TAB!=="list"){
-    $("#main").innerHTML=seg()+levelCard()+tabs()+(TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
+    $("#main").innerHTML=seg()+levelCard()+tabs()+(TAB==="map"?mapView():TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
     bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); bindLevel(); window.scrollTo(0,0); return;
   }
   let h=seg()+levelCard()+tabs();
