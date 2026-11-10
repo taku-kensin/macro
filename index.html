@@ -237,6 +237,14 @@ function mapView(){
   const F=M.foreign;
   if(F&&F.bands.length){ const mx=Math.max(...F.bands.map(b=>Math.abs(b.v)),1);
     h+=`<div class="cat">価格帯ごとの外資の先物（${esc(F.from)}〜${esc(F.to)}の${F.weeks}週・推計）</div><div class="card">${F.bands.map(b=>`<div style="display:flex;align-items:center;gap:6px;margin:2px 0"><div class="note" style="width:62px;text-align:right;font-family:var(--num)">${f(b.lo)}〜</div><div style="flex:1;display:flex"><div style="flex:1;display:flex;justify-content:flex-end">${b.v<0?`<div style="height:10px;width:${Math.abs(b.v)/mx*100}%;background:${col.res};border-radius:2px"></div>`:""}</div><div style="width:1px;background:var(--line)"></div><div style="flex:1">${b.v>0?`<div style="height:10px;width:${b.v/mx*100}%;background:${col.sup};border-radius:2px"></div>`:""}</div></div><div class="note" style="width:52px;text-align:right;font-family:var(--num)">${sg(b.v)}</div></div>`).join("")}<div class="note" style="margin-top:6px">左（赤）＝その値段の帯で外資が売り越し、右（緑）＝買い越し</div></div>`; }
+  const B=D.level.brokers;
+  if(B){ const row=(a,b)=>`<tr><td style="text-align:left">${a?esc(a.name):""}</td><td style="color:${col.res}">${a?sg(a.net):""}</td><td style="text-align:left">${b?esc(b.name):""}</td><td style="color:${col.sup}">${b?sg(b.net):""}</td></tr>`;
+    h+=`<div class="cat">先物：会社ごとの建玉（${esc(B.date)}の週）</div><div class="card" style="overflow-x:auto"><div class="note" style="margin-bottom:6px">${B.groups.map(g=>esc(g.group)+" "+sg(g.net)).join("　")}</div><table><tr><th style="text-align:left">売り越しが大きい</th><th>ネット</th><th style="text-align:left">買い越しが大きい</th><th>ネット</th></tr>
+      ${Array.from({length:Math.max(B.sell.length,B.buy.length)},(_,i)=>row(B.sell[i],B.buy[i])).join("")}</table><div class="note" style="margin-top:6px">手口は裁定や顧客の注文を含むので、そのまま相場の向きへの賭けとは読めません</div></div>`; }
+  const OD=D.level.optdist;
+  if(OD){ h+=`<div class="cat">オプション：行使価格ごとの建玉と外資（${esc(OD.month)}限・週次）</div><div class="card" style="overflow-x:auto"><table><tr><th>週</th><th>行使価格</th><th>プット</th><th>コール</th><th>外資のプット</th><th>外資のコール</th></tr>
+      ${OD.rows.map(x=>`<tr><td class="mute">${esc(x.date)}</td><td>${f(x.k)}</td><td>${x.put==null?"—":f(x.put)}</td><td>${x.call==null?"—":f(x.call)}</td><td style="color:${x.pf>0?col.sup:x.pf<0?col.res:"inherit"}">${x.pf==null?"—":sg(x.pf)}</td><td style="color:${x.cf>0?col.sup:x.cf<0?col.res:"inherit"}">${x.cf==null?"—":sg(x.cf)}</td></tr>`).join("")}</table>
+      <div class="note" style="margin-top:6px">外資のプットがプラス＝下への保険を買っている側、マイナス＝保険を売っている側。公開されるのは、週末の時点の値段の上下250円の行使価格だけです</div></div>`; }
   h+=`<p class="note" style="margin-top:10px">${esc(M.rule)}</p>`;
   return h;
 }
