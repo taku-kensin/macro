@@ -157,66 +157,156 @@ let SEC=localStorage.getItem("app_sec")||"macro";
 function seg(){ if(!D.asset) return ""; return `<div class="seg">${[["macro","マクロ"],["asset","資産"]].map(t=>`<button data-s="${t[0]}" class="${SEC===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
 function bindSeg(){ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{SEC=b.dataset.s; localStorage.setItem("app_sec",SEC); home();}); }
 function hasMap(){ return !!(D.level&&D.level.map&&D.level.map.rows&&D.level.map.rows.length); }
-function tabs(){ return `<div class="tabs">${[["map","値段の地図"],["flow",D.level?"1か月の傾向（参考）":"1か月の傾向"],["sector","業種の流れ"],["perf","条件の成績"],["list","指標一覧"]].filter(t=>t[0]==="list"||(t[0]==="map"?hasMap():t[0]==="sector"?D.sector:D.flow)).map(t=>`<button data-t="${t[0]}" class="${TAB===t[0]?"on":""}">${t[1]}</button>`).join("")}</div>`; }
-function bindTabs(){ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.t; home();}); }
-const LVC=l=>"l"+l;
-function condCard(r,opts={}){
-  const tag=r.stale&&r.stale.length?`<span class="lv lx">データが古い</span>`:`<span class="lv ${LVC(r.level)}">${esc(r.label)}</span>`;
-  const rg=Object.entries(r.regimes).map(([k,v])=>`<span class="mute">${esc(k)}</span>`).join("")+Object.entries(r.regimes).map(([k,v])=>`<span style="font-family:var(--num)">${v==null?"—":(v>0?"+":"")+v}</span>`).join("");
-  return `<div class="card tap"><div class="row"><span>${esc(r.name)}</span>${tag}</div>
-    ${opts.now?`<div class="note">${r.now.map(esc).join("／")}</div>`:""}
-    <div class="row note"><span>前半 ${r.first>0?"+":""}${r.first}／後半 ${r.second>0?"+":""}${r.second}</span><span>上がった割合 ${r.up}%・${r.count}回</span></div>
-    <div class="more">相場ごとの「ふだん」との差（1か月後、ポイント）<div class="rg">${rg}</div>
-    ${r.stale&&r.stale.length?`<div style="margin-top:6px">使っている値が古いため、全体の判定から外しています：${r.stale.map(esc).join("、")}</div>`:""}</div></div>`;
+// v1.13 2026/11/23 書き方の見直し：頭は3枚のカード（相場全体・半導体と受け皿・値段の節目）。
+// 出すのは「今の数字」「過去の例（回数と一番悪い例つき）」「言えない事」だけ。買う・売る・待つは出さない。
+// 前の「買いやすさ1〜5」「今週どうする」「1か月の傾向（好機〜警戒）」「条件の成績」は外した（記録：マクロアプリの表現の見直し_20261123.md）
+const pct1=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1)+"%";
+const mdy=s=>{ if(!s) return "—"; const p=String(s).split(/[\/-]/); return p.length>=3?(+p[1])+"/"+(+p[2]):String(s); };
+const ymdj=s=>{ if(!s) return "—"; const p=String(s).split(/[\/-]/); return p.length>=3?p[0]+"/"+(+p[1])+"/"+(+p[2]):String(s); };
+const yen0=v=>v==null?"—":Math.round(v).toLocaleString();
+const ud=v=>v>0?"up":v<0?"dn":"";
+function go(t){ TAB=t; home(); }
+function bindNav(){ document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go)); }
+const linkRow=(t,label)=>`<button data-go="${t}" style="display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);color:var(--accent);font:inherit;font-size:13px;padding:12px 0 2px;margin-top:8px">${label} ›</button>`;
+const fact=(k,v)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px"><span class="mute" style="white-space:nowrap">${k}</span><span style="text-align:right">${v}</span></div>`;
+
+// 下げの深さの物差し：左端が0%、右へ行くほど深い。点＝過去の大きな下げの底、線＝今
+function ruler(sc){
+  const R=sc.ruler; if(!R||!R.n) return "";
+  const LO=Math.min(-35,Math.floor((Math.min(...R.past,R.now)-2)/5)*5), X=v=>4+(Math.min(0,v)/LO)*92;
+  const placed=[]; let dots="";
+  [...R.past].sort((a,b)=>b-a).forEach(v=>{ const x=X(v); let r=0; while(placed.some(q=>Math.abs(q[0]-x)<2.8&&q[1]===r)) r++; placed.push([x,r]);
+    dots+=`<i style="position:absolute;left:calc(${x.toFixed(2)}% - 4px);top:${36-r*10}px;width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:2px solid var(--mute);background:var(--panel)"></i>`; });
+  const xn=X(R.now), ticks=[]; for(let v=0;v>=LO;v-=10) ticks.push(v);
+  return `<div style="position:relative;height:70px;margin:8px 0 2px">
+    <div style="position:absolute;left:4%;right:4%;top:40px;height:2px;background:var(--line)"></div>${dots}
+    <div style="position:absolute;left:calc(${xn.toFixed(2)}% - 1px);top:4px;width:2px;height:46px;background:var(--accent)"></div>
+    <span style="position:absolute;${xn>70?`right:calc(${(100-xn).toFixed(2)}% + 6px)`:`left:calc(${xn.toFixed(2)}% + 6px)`};top:0;font-size:11px;line-height:14px;color:var(--accent);font-weight:700;white-space:nowrap">今 ${pct1(R.now)}</span>
+    ${ticks.map(v=>`<span style="position:absolute;left:calc(${X(v).toFixed(2)}% - 16px);top:52px;width:32px;text-align:center;font-size:11px;color:var(--mute);font-family:var(--num)">${v}%</span>`).join("")}</div>`;
 }
-function flowView(){
-  const f=D.flow; const c=f.counts;
-  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(f.week)}の値で判定${f.flow_week&&f.flow_week!==f.week?`（投資主体別は${esc(f.flow_week)}の週まで）`:""}</span><span class="note">成り立っている条件から</span></div>
-    <div class="note" style="margin-top:4px">${esc(f.meaning||"過去に同じ条件だった週の、1か月後の日経平均の傾向")}</div>${D.level?`<div class="note" style="margin-top:4px;color:var(--accent)">※恐怖の指標が中心の、前からの判定（参考）。新しい判定は一番上の「相場の段階」です</div>`:""}
-    ${D.level?`<div class="row" style="margin-top:8px"><span class="note">前からの判定（恐怖の指標だけの参考）</span><span class="lv" style="background:var(--panel2);color:var(--mute)">${esc(f.overall_label)}</span></div>`:`<div style="text-align:center;margin:8px 0 0"><span class="lv ${LVC(f.overall)}" style="font-size:22px;padding:4px 18px;border-radius:14px">${esc(f.overall_label)}</span></div>
-    <div class="meter">${[-2,-1,0,1,2].map(l=>`<div style="${l===f.overall?"background:"+({"-2":"#e0727a","-1":"#d6b25e","0":"#8b95a3","1":"#5fbf8f","2":"#3fbf7f"})[l]:""}"></div>`).join("")}</div>
-    <div class="mlab"><span>警戒</span><span>注意</span><span>中立</span><span>良好</span><span>好機</span></div>`}
-    <div class="note" style="margin-top:8px">上がりやすい側 ${c.up}／下がりやすい側 ${c.down}${c.stale?`／データが古く除外 ${c.stale}`:""}</div></div>`;
-  h+=`<div class="cat">成り立っている条件</div>`+(f.lit.length?f.lit.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
-  h+=`<div class="cat">もう少しで成り立つ条件</div>`+(f.near.length?f.near.map(r=>condCard(r,{now:1})).join(""):`<div class="note">ありません</div>`);
-  h+=`<div class="cat">指標の位置（過去の中で 0〜100）</div><div class="card">`+f.positions.map(p=>`<div class="row" style="margin-top:6px"><span>${esc(p.name)}</span><span style="font-family:var(--num)">${fmt(p.value)}${esc(p.unit)}　${p.pct}</span></div>
-    <div class="pbar"><i style="left:${p.pct}%"></i></div><div class="note" ${p.stale?'style="color:var(--dn)"':""}>${esc(p.span)}　${esc(p.date)}${p.stale?"（古い）":""}</div>`).join("")+`</div>`;
-  if(f.reference&&f.reference.length){
-    h+=`<div class="cat">参考（データが約2年のため、判定には使わない）</div>`+f.reference.map(r=>`<div class="card"><div class="row"><span>${esc(r.name)}</span>${r.lit?'<span class="lv l0">成立中</span>':""}</div>
-      <div class="row note"><span>${esc(r.now)}</span><span>1か月後 ${r.avg==null?"—":(r.avg>0?"+":"")+r.avg+"%"}（ふだん ${r.base>0?"+":""}${r.base}%）・${r.count}回</span></div></div>`).join("");
+
+// 1枚目：相場全体（今の数字だけ。名前は状態を言う言葉）
+function sceneCard(){
+  const L=D.level; if(!L) return "";
+  const sc=L.scene, fa=L.facts||{};
+  if(!sc) return `<div class="card"><div class="row"><b>相場全体</b><span class="note">${esc(L.date||"")}の終値まで</span></div>
+    <div class="note" style="margin-top:6px">データが前の形のままです。PCで更新をもう一度動かすと、新しい形で出ます。</div></div>`;
+  const ds=sc.decl_sum, from=ds&&ds.from?ds.from.replace("/","年")+"月":"";
+  const lowTxt=`${esc(mdy(sc.low_date))}の${yen0(sc.low)}円`+(sc.low_days===0?"（今の所の一番安い終値）":`（${sc.low_days}営業日、割っていない）`);
+  return `<div class="card"><div class="row"><b>相場全体</b><span class="note">${esc(mdy(L.date))}の終値 ${yen0(L.close)}円</span></div>
+    <div style="display:flex;align-items:center;gap:12px;margin:8px 0 0"><div style="font-size:34px;line-height:1.25;font-family:var(--num);white-space:nowrap" class="${ud(sc.dd)}">${pct1(sc.dd)}</div>
+      <div><div style="font-size:13px">高値からの下げ</div><div class="note">${esc(mdy(sc.high_date))}の${yen0(sc.high)}円から${sc.high_days}営業日</div></div></div>
+    <div style="font-size:13px;margin-top:4px">今の場面：${esc(sc.name)}</div>
+    ${ruler(sc)}
+    <div class="note">点＝大きな下げ${sc.ruler?sc.ruler.n:0}回の底${from?"（"+esc(from)+"から）":""}${sc.in_decline&&sc.ruler?`。今より深かったのは${sc.ruler.deeper}回、浅かったのは${sc.ruler.shallower}回`:""}</div>
+    <div style="margin-top:8px">
+      ${fact("安値",lowTxt)}
+      ${fact("信用で買った人の含み損",fa.pl==null?"—":`<span style="font-family:var(--num)">${pct1(fa.pl)}</span>（${esc(fa.pl_date||"—")}の週）`)}
+      ${fact("日経VI",fa.vi==null?"—":`<span style="font-family:var(--num)">${fa.vi}</span>${fa.vi_rank==null?"":`（3年の中で高い方から${100-fa.vi_rank}%）`}`)}
+      ${fact("200日線から",`<span style="font-family:var(--num)">${pct1(fa.dev200)}</span>`)}
+    </div>${linkRow("past","過去の例を見る")}</div>`;
+}
+
+// 2枚目：半導体と受け皿（そのものの値動き。対TOPIXは押した先に）
+function semisCard(){
+  const S=D.sector; if(!S) return "";
+  if(!S.moves) return `<div class="card"><div class="row"><b>半導体と受け皿</b><span class="note">${esc(S.week||"")}の週</span></div><div style="font-size:13px;margin-top:6px">今週の形：${esc(S.stage?S.stage.label:"—")}</div>${linkRow("sector","業種を見る")}</div>`;
+  const g=c=>S.moves.find(m=>m.code===c)||{}, t=g("TOPIX"), s=g("2644"), u=S.uke||{};
+  const mx=Math.max(4,...[t.w_abs,s.w_abs,u.w_abs].map(v=>Math.abs(v||0)));
+  const bar=(nm,v)=>`<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><div style="width:100px;font-size:12px;white-space:nowrap">${nm}</div>
+    <div style="flex:1;display:flex;align-items:center"><div style="flex:1;display:flex;justify-content:flex-end">${v<0?`<div style="height:12px;width:${(Math.abs(v)/mx*100).toFixed(1)}%;background:var(--dn);border-radius:3px 0 0 3px"></div>`:""}</div><div style="width:1px;height:18px;background:var(--mute)"></div><div style="flex:1">${v>0?`<div style="height:12px;width:${(v/mx*100).toFixed(1)}%;background:var(--up);border-radius:0 3px 3px 0"></div>`:""}</div></div>
+    <div style="width:60px;text-align:right;font-family:var(--num);font-size:14px;white-space:nowrap" class="${ud(v)}">${pct1(v)}</div></div>`;
+  const cell=(k,v)=>`<div><div class="note" style="font-size:11px">${k}</div><div style="font-family:var(--num);font-size:14px" class="${ud(v)}">${pct1(v)}</div></div>`;
+  return `<div class="card"><div class="row"><b>半導体と受け皿</b><span class="note">今週 ${esc(mdy(S.week_from))}→${esc(mdy(S.last_day))}${S.partial?"（途中）":""}</span></div>
+    <div class="note" style="margin-top:6px">そのものの値動き</div>
+    ${bar("TOPIX",t.w_abs)}${bar("半導体（2644）",s.w_abs)}${bar("受け皿",u.w_abs)}
+    <div class="note" style="margin-top:8px">今四半期（${esc(mdy(S.q_from))}→${esc(mdy(S.last_day))}）</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:2px 0 8px">${cell("TOPIX",t.q_abs)}${cell("半導体",s.q_abs)}${cell("受け皿",u.q_abs)}</div>
+    ${fact(S.partial?"先週末の形":"今週の形",esc(S.stage.label))}
+    <div class="note" style="margin-top:2px">受け皿＝${esc(u.of||"")}</div>${linkRow("sector","業種を見る")}</div>`;
+}
+
+// 3枚目：値段の節目（今の値段に近い上下2つずつ。値段の地図の中身から）
+function nodesCard(){
+  if(!hasMap()) return "";
+  const M=D.level.map, rs=M.rows.filter(r=>r.kind==="res"||r.kind==="sup"||r.kind==="pivot");
+  const up=rs.filter(r=>r.lo>M.price).slice(-2), dn=rs.filter(r=>r.hi<M.price).slice(0,2);
+  if(!up.length&&!dn.length) return "";
+  const why=r=>esc((r.why&&r.why[0]||"").replace(/\s?約?[\d,]+円/,""));
+  const row=r=>`<div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--line)"><div style="width:84px;font-family:var(--num);font-size:14px;white-space:nowrap">${r.hi===r.lo?yen0(r.hi):yen0(r.lo)+"〜"}円</div><div class="note" style="flex:1">${why(r)}</div></div>`;
+  return `<div class="card"><div class="row"><b>値段の節目</b><span class="note">${M.option?esc(M.option.month)+"限のオプションなど":""}</span></div>
+    <div style="margin-top:6px">${up.map(row).join("")}
+      <div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--line)"><div style="width:84px;font-family:var(--num);font-size:14px;font-weight:700;color:var(--accent);white-space:nowrap">${yen0(M.price)}円</div><div style="font-size:12px;font-weight:700;color:var(--accent)">いま</div></div>
+      ${dn.map(row).join("")}</div>${linkRow("map","値段の地図を見る")}</div>`;
+}
+
+// 押した先：相場全体の過去の例
+function pastView(){
+  const L=D.level, sc=L.scene, h=sc.hit, ds=sc.decl_sum;
+  const n=(v)=>v==null?`<span class="mute">—</span>`:`<span class="${ud(v)}">${pct1(v)}</span>`;
+  let o="";
+  if(h){
+    o+=`<div class="card"><div class="row"><b>高値から${h.th}%下げた日の、その後</b><span class="note">終わった下げ${h.n}回</span></div>
+      <div style="overflow-x:auto;margin-top:6px"><table><tr><th style="text-align:left">届いた日</th><th>底まで<br>さらに</th><th>20営業<br>日後</th><th>60営業<br>日後</th></tr>
+      ${h.rows.map(x=>`<tr><td style="${x.done?"":"color:var(--accent);font-weight:700"}">${esc(ymdj(x.date))}${x.done?"":`<div class="note" style="color:var(--accent)">今回</div>`}</td><td>${x.more==null?`<span class="mute">—</span>`:x.more_days===0?`<span class="mute">その日が底</span>`:n(x.more)}</td><td>${n(x.f20)}</td><td>${n(x.f60)}</td></tr>`).join("")}</table></div>
+      <div style="font-size:13px;margin-top:10px">その日が底だった：${h.same_day}回</div>
+      <div style="font-size:13px">さらに下げた：${h.more_n}回${h.more_n?`（${pct1(h.more_max)}〜${pct1(h.more_min)}）`:""}</div>
+      <div style="font-size:13px">20営業日後に上：${h.n20}回のうち${h.up20}回（${pct1(h.f20_min)}〜${pct1(h.f20_max)}）</div>
+      <div style="font-size:13px">60営業日後に上：${h.n60}回のうち${h.up60}回（${pct1(h.f60_min)}〜${pct1(h.f60_max)}）</div>
+      <div style="margin-top:10px;border:1px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.6">回数は${h.n}回だけです。法則ではありません。<br>${esc(sc.note2008||"")}<br>この先を約束する物ではありません。</div></div>`;
+  } else {
+    o+=`<div class="card"><b>高値から大きく下げた日の、その後</b><div class="note" style="margin-top:6px">今は、高値から12%以上の下げの中ではありません。下に、過去の大きな下げの一覧があります。</div></div>`;
   }
-  h+=`<p class="note" style="margin-top:16px">決め方：${esc(f.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
+  if(sc.confirm&&sc.confirm.length){
+    o+=`<div class="card"><div class="row"><b>底は、確かめられるか</b><span class="note">終わった大きな下げ${ds?ds.n:""}回の中で</span></div>
+      <div style="overflow-x:auto;margin-top:6px"><table><tr><th style="text-align:left">確かめ方</th><th>その後に<br>安値を割った</th><th>底から何%上で<br>成り立ったか</th></tr>
+      ${sc.confirm.map(x=>`<tr><td>安値を${x.days}日割らない</td><td>${x.pct}%<div class="note">${x.n}回のうち${x.broke}回</div></td><td>${pct1(x.above)}</td></tr>`).join("")}</table></div>
+      <div style="font-size:13px;margin-top:10px;line-height:1.6">日数を長く取るほど破れにくくなります。<br>その分、確かめられた時には底から離れています。<br>底は、後からしか分かりません。</div></div>`;
+  }
+  if(ds){
+    o+=`<div class="card"><div class="row"><b>下げの深さと長さ</b><span class="note">${ds.n}回</span></div>
+      <div style="overflow-x:auto;margin-top:6px"><table><tr><th></th><th>浅い・短い</th><th>真ん中</th><th>深い・長い</th></tr>
+      <tr><td>底の深さ</td><td>${pct1(ds.depth[0])}</td><td>${pct1(ds.depth[1])}</td><td>${pct1(ds.depth[2])}</td></tr>
+      <tr><td>高値から底まで</td><td>${ds.days[0]}日</td><td>${ds.days[1]}日</td><td>${ds.days[2]}日</td></tr>
+      ${ds.back?`<tr><td>底から高値に<br>戻るまで</td><td>${ds.back[0]}日</td><td>${ds.back[1]}日</td><td>${ds.back[2]}日</td></tr>`:""}</table></div>
+      ${sc.in_decline?`<div style="font-size:13px;margin-top:10px">今回は、${pct1(sc.dd)}、${sc.high_days}営業日目（底は未確定）</div>`:""}
+      <div class="note" style="margin-top:4px">大きな下げ＝60日の高値から12%以上下げた下げ。日は営業日</div></div>
+      <div class="cat">大きな下げの一覧</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">高値の日</th><th>底の日</th><th>深さ</th><th>日数</th></tr>
+      ${sc.declines.slice().reverse().map(e=>`<tr><td style="${e.done?"":"color:var(--accent);font-weight:700"}">${esc(ymdj(e.high))}</td><td>${esc(ymdj(e.bottom))}${e.done?"":`<div class="note">今回・未確定</div>`}</td><td class="dn">${pct1(e.depth)}</td><td>${e.days}</td></tr>`).join("")}</table></div>`;
+  }
+  o+=`<div class="card"><b>言えない事</b><div style="font-size:13px;line-height:1.7;margin-top:6px">今が底かどうか。<br>この後、上がるか下がるか。</div>
+    <div class="note" style="margin-top:4px">過去の例は回数が少なく、日経が長く上がった時期の中の出来事です。</div></div>
+    <p class="note" style="margin-top:10px">決め方：${esc(L.rule||"")}</p>`;
+  return o;
+}
+
+// 押した先：指標の一覧（頭に、指標の位置＝過去3年の中でどこにいるか）
+function listView(){
+  let h="";
+  const P=D.pos;
+  if(P&&P.items&&P.items.length){
+    h+=`<div class="cat">指標の位置（過去の中で 0〜100）</div><div class="card">`+P.items.map(p=>`<div class="row" style="margin-top:6px"><span>${esc(p.name)}</span><span style="font-family:var(--num)">${fmt(p.value)}${esc(p.unit)}　${p.pct}</span></div>
+      <div class="pbar"><i style="left:${p.pct}%"></i></div><div class="note" ${p.stale?'style="color:var(--dn)"':""}>${esc(p.span)}　${esc(p.date)}${p.stale?"（古い）":""}</div>`).join("")+`<div class="note" style="margin-top:8px">位置は、その指標が、下に書いた期間の中で、低い方から何%の所にいるか。良し悪しは言いません</div></div>`;
+  }
+  for(const c of D.cats){
+    h+=`<div class="cat">${esc(c.title)}</div>`;
+    for(const it of c.items){
+      const lv=lastVal(it); let right="";
+      if(lv){ const ch=lv.flow?null:(lv.prev!=null?lv.v-lv.prev:null);
+        right=`<div class="v ${lv.flow?(lv.v>0?"up":lv.v<0?"dn":""):""}">${fmt(lv.v)}<small class="${ch>0?"up":ch<0?"dn":"mute"}">${lv.flow?"":ch==null?"":"前回比 "+(ch>0?"+":"")+fmt(ch)}</small></div>`; }
+      else if(it.kind==="snapshot") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄</div>`;
+      else if(it.kind==="strike") right=`<div class="v mute" style="font-size:12px">${esc(it.date)}</div>`;
+      else if(it.kind==="styles"){ const g=(it.data.spreads||[])[0]; right=`<div class="v mute" style="font-size:12px">${g?esc(g.name)+"<div>5日 "+(g.d5>0?"+":"")+Number(g.d5).toFixed(2)+"%</div>":""}</div>`; }
+      else if(it.kind==="baskets"){ const r=[...it.data.baskets].sort((a,b)=>b.d1-a.d1); right=`<div class="v mute" style="font-size:12px">強い ${esc(r[0].name)}<div>弱い ${esc(r[r.length-1].name)}</div></div>`; }
+      else if(it.kind==="sectors"){ const t=it.rows[0]; right=`<div class="v mute" style="font-size:12px">33業種　${esc(it.date||"")}<div>首位 ${esc(t?t[0]:"")}</div></div>`; }
+      else if(it.kind==="weights") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄　${esc(it.date||"")}</div>`;
+      h+=`<div class="item" data-id="${esc(it.id)}"><div><div class="t">${esc(it.title)}</div><div class="d">${lv?esc(lv.name)+"　"+esc(lv.d):""}</div></div>${right}</div>`;
+    }
+  }
+  h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
   return h;
 }
-// v1.8 2026/11/06 相場の段階（買いやすさ1〜5）。マクロの画面の一番上に出す。押すと中身が開く
-const LVCOL={5:"#3fbf7f",4:"#5fbf8f",3:"#8b95a3",2:"#e8a35a",1:"#e0727a"};
-function lvRes(s){ return s&&s.n?`過去${s.n}回中${s.up}回、1か月後に上がった・途中の一番深い下げ ${s.worst}%${s.ref?"（例が少ないので参考）":""}`:"過去の例はまだありません"; }
-function levelCard(){
-  const L=D.level; if(!L) return "";
-  const col=LVCOL[L.level]||"#8b95a3", cur=L.stats.find(s=>s.key===L.key);
-  const sec=L.sector?(L.sector.buy?"買い場":L.sector.stage):"未取得";
-  return `<div class="card lvc" id="lvc" style="border:2px solid ${col}">
-    <div class="row"><span class="note">相場の段階（${esc(L.date)}の終値まで）</span><span class="note">買いやすさ 1〜5</span></div>
-    <div style="display:flex;align-items:center;gap:14px;margin:8px 0 2px">
-      <div style="font-size:46px;font-weight:700;line-height:1;color:${col};font-family:var(--num)">${L.level}</div>
-      <div><div style="font-size:23px;font-weight:700;color:${col}">${esc(L.label)}</div><div class="note">${esc(L.one)}</div></div></div>
-    <div class="meter">${[1,2,3,4,5].map(k=>`<div style="${k===L.level?"background:"+LVCOL[k]:""}"></div>`).join("")}</div>
-    <div class="mlab"><span>1 上がりすぎ</span><span>2 急落中</span><span>3 ふつう</span><span>4 買い場</span><span>5 強</span></div>
-    <div class="note" style="margin-top:8px">${cur?esc(lvRes(cur)):"ふだんどおり（ふだんは約"+L.base.up+"%が1か月後に上がる）"}</div>
-    <div class="note" style="margin-top:4px">${L.checks.map(c=>`<span style="white-space:nowrap">${c.on?"○":"－"} ${esc(c.name)}</span>`).join("　")}　<span style="white-space:nowrap">業種の流れ：${esc(sec)}</span>　<span style="color:var(--accent);white-space:nowrap">詳しく ›</span></div>
-    <div class="more">
-      ${L.checks.map(c=>`<div style="margin-top:6px"><b>${c.on?"○":"－"} ${esc(c.name)}</b>${c.missing?"（データが古い）":""}<div class="note">${esc(c.detail)}</div></div>`).join("")}
-      <div style="margin-top:6px"><b>${L.hot.on?"○":"－"} 上がりすぎ</b><div class="note">${esc(L.hot.detail)}</div></div>
-      <div style="margin-top:6px"><b>業種の流れ：${esc(sec)}</b><div class="note">${L.sector?esc(L.sector.week+"の週 "+L.sector.stage+"（直近："+L.sector.recent.map(x=>x.week+" "+x.stage).join("・")+"）"+(L.sector.partial?"。今週（"+L.sector.partial.week+"まで）は途中で「"+L.sector.partial.stage+"」。週の終わりに決まるので、まだ使わない":"")):"cache_sector が見つかりません"}</div></div>
-      <div style="margin-top:10px;overflow-x:auto"><table><tr><th>段階</th><th style="text-align:left">表示</th><th>1か月後に上がった</th><th>途中の最悪</th></tr>
-        ${L.stats.map(s=>`<tr style="${s.key===L.key?"font-weight:700":""}"><td style="color:${LVCOL[s.level]}">${s.level}</td><td style="text-align:left">${esc(s.label)}${s.ref?"<div class='note'>参考</div>":""}</td><td>${s.n?s.up+"／"+s.n+"回":"—"}</td><td>${s.worst==null?"—":s.worst+"%"}</td></tr>`).join("")}
-        <tr><td>—</td><td style="text-align:left">ふだん</td><td>約${L.base.up}%</td><td>—</td></tr></table></div>
-      <div class="note" style="margin-top:8px">直近：${L.history.map(x=>esc(x.date)+" "+x.level).join("・")}</div>
-      <div class="note" style="margin-top:6px">${esc(L.rule)}。過去の結果であり、この先を約束するものではありません。</div>
-    </div></div>`;
-}
-function bindLevel(){ const c=$("#lvc"); if(c) c.onclick=()=>c.classList.toggle("open"); }
-// v1.11 2026/11/10 価格帯ごとの厚さ：その値段でどれだけ売買されたか（過去1年・直近60日）と建玉を横棒にし、売買の薄い帯を「滑りやすい」と色で出す
+// v1.11 2026/11/10 価格帯ごとの売買の量：その値段でどれだけ売買されたか（過去1年・直近60日）と建玉を横棒にする（v1.13：見込みの言葉をやめ、売買が多い・少ないだけを言う）
 function profileCard(col){
   const F=D.level.profile, f=v=>Math.round(v).toLocaleString();
   const bgOf=z=>z.cls==="thin"?"rgba(214,178,94,.22)":z.cls==="thick"?(z.now?"rgba(139,149,163,.22)":z.lo>F.price?"rgba(224,114,122,.18)":"rgba(95,191,143,.18)"):"transparent";
@@ -224,10 +314,10 @@ function profileCard(col){
   const isNow=r=>r.b<=F.price&&F.price<r.b+F.step;
   const labelRow={};
   F.zones.forEach((z,zi)=>{ const rs=F.rows.filter(r=>z.lo<=r.b&&r.b<z.hi&&!isNow(r)); if(rs.length) labelRow[rs[Math.floor((rs.length-1)/2)].b]=zi; });
-  let h=`<div class="card"><div class="row"><span class="note">${esc(F.date)}の終値 ${f(F.price)}円</span><span class="note">棒が短い所ほど滑りやすい</span></div>
+  let h=`<div class="card"><div class="row"><span class="note">${esc(F.date)}の終値 ${f(F.price)}円</span><span class="note">棒＝その値段での売買の量</span></div>
     <div class="note" style="margin:6px 0 2px"><span style="color:rgba(106,169,233,.7)">■</span> 過去${F.n}日の売買代金　<span style="color:#6aa9e9">■</span> うち直近${F.n60}日　<span style="color:${col.sup}">■</span> プットの建玉　<span style="color:${col.res}">■</span> コールの建玉</div>
-    <div class="note" style="margin:0 0 8px"><span style="background:rgba(214,178,94,.35);padding:0 6px;border-radius:3px">滑りやすい</span>　<span style="background:rgba(95,191,143,.3);padding:0 6px;border-radius:3px">厚い支え</span>　<span style="background:rgba(224,114,122,.3);padding:0 6px;border-radius:3px">厚い抵抗</span></div>
-    <div class="note" style="display:flex;gap:6px;margin-bottom:2px"><div style="width:50px;text-align:right">値段</div><div style="flex:1.5">売買の量</div><div style="flex:.8">建玉</div><div style="width:78px;text-align:center">見立て</div></div>`;
+    <div class="note" style="margin:0 0 8px"><span style="background:rgba(214,178,94,.35);padding:0 6px;border-radius:3px;white-space:nowrap">売買が少ない</span>　<span style="background:rgba(95,191,143,.3);padding:0 6px;border-radius:3px;white-space:nowrap">多い（下）</span>　<span style="background:rgba(224,114,122,.3);padding:0 6px;border-radius:3px;white-space:nowrap">多い（上）</span></div>
+    <div class="note" style="display:flex;gap:6px;margin-bottom:2px"><div style="width:50px;text-align:right">値段</div><div style="flex:1.5">売買の量</div><div style="flex:.8">建玉</div><div style="width:78px;text-align:center">売買の量</div></div>`;
   for(const r of F.rows){
     const z=F.zones.find(z=>z.lo<=r.b&&r.b<z.hi)||{cls:"mid"}, now=isNow(r);
     const lab=now?`いま ${f(F.price)}`:(labelRow[r.b]!=null?F.zones[labelRow[r.b]].label:"");
@@ -245,17 +335,17 @@ function profileCard(col){
 function levelsCard(M,col){
   const f=v=>Math.round(v).toLocaleString(), rs=M.rows.filter(r=>r.kind==="res"||r.kind==="sup"||r.kind==="pivot");
   if(!rs.length) return "";
-  return `<div class="cat">節目（上から）</div><div class="card">${rs.map(r=>`<div style="display:flex;gap:8px;margin:5px 0;align-items:baseline"><div style="width:96px;text-align:right;font-family:var(--num);font-size:12px;white-space:nowrap">${r.hi===r.lo?f(r.hi):f(r.lo)+"〜"+f(r.hi)}</div><div style="width:52px;font-weight:700;font-size:12px;color:${col[r.kind]||col.run}">${r.kind==="pivot"?"中心":esc(r.title)}</div><div class="note" style="flex:1">${r.why.map(esc).join("<br>")}</div></div>`).join("")}
+  return `<div class="cat">節目（上から）</div><div class="card">${rs.map(r=>`<div style="display:flex;gap:8px;margin:5px 0;align-items:baseline"><div style="width:96px;text-align:right;font-family:var(--num);font-size:12px;white-space:nowrap">${r.hi===r.lo?f(r.hi):f(r.lo)+"〜"+f(r.hi)}</div><div style="width:52px;font-weight:700;font-size:12px;color:${col[r.kind]||col.run}">${r.kind==="pivot"?"建玉最多":esc(r.title)}</div><div class="note" style="flex:1">${r.why.map(esc).join("<br>")}</div></div>`).join("")}
     ${M.range1d?`<div class="note" style="margin-top:6px">1日の値幅の目安 約±${f(M.range1d)}円（日経VI ${M.vi}%のままという仮定）</div>`:""}</div>`;
 }
-// v1.9 2026/11/10 値段の地図：オプションの建玉・節目・外資の先物の帯から、支え・抵抗・走りやすい区間を上から順に並べる
+// v1.9 2026/11/10 値段の地図：オプションの建玉・節目・外資の先物の帯を、上から順に並べる（v1.13：上の節目・下の節目・節目の無い区間、と事実の言葉で出す）
 function mapView(){
   const M=D.level.map, f=v=>Math.round(v).toLocaleString(), sg=v=>(v>0?"+":"")+Math.round(v).toLocaleString();
   const col={res:"#e0727a",sup:"#5fbf8f",pivot:"#d6b25e",run:"#8b95a3"};
-  let h=guideCard();
+  let h="";
   if(D.level.profile&&D.level.profile.rows&&D.level.profile.rows.length){ h+=profileCard(col)+levelsCard(M,col); } else {
   h+=`<div class="card"><div class="row"><span class="note">${esc(M.date)}の終値 ${f(M.price)}円</span><span class="note">${M.range1d?`1日の値幅の目安 約±${f(M.range1d)}円`:""}</span></div>
-    <div class="note" style="margin:4px 0 8px"><span style="color:${col.res}">■</span> 上値を抑える所　<span style="color:${col.sup}">■</span> 下で支える所　<span style="color:${col.run}">┄</span> 止まる理由が少なく走りやすい区間</div>`;
+    <div class="note" style="margin:4px 0 8px"><span style="color:${col.res}">■</span> 上の節目　<span style="color:${col.sup}">■</span> 下の節目　<span style="color:${col.run}">┄</span> 節目の無い区間</div>`;
   for(const r of M.rows){
     if(r.kind==="now"){ h+=`<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><div style="width:62px;text-align:right;font-family:var(--num);font-weight:700">${f(r.hi)}</div><div style="flex:1;border:2px solid var(--accent);border-radius:14px;padding:3px 12px;font-weight:700;color:var(--accent)">いま</div></div>`; continue; }
     const c=col[r.kind]||col.run, rng=r.hi===r.lo?f(r.hi):`${f(r.hi)}<br>${f(r.lo)}`;
@@ -283,23 +373,33 @@ function mapView(){
   h+=`<p class="note" style="margin-top:10px">${esc(M.rule)}</p>`;
   return h;
 }
-function guideCard(){
-  const G=D.guide; if(!G) return "";
-  return `<div class="card" style="border-color:#5fbf8f"><div class="row"><span style="font-weight:600">今週どうする</span><span class="note">${D.level?"相場の段階＋業種の流れ":"マクロの判定＋業種の流れ"}</span></div>
-    ${G.lines.map(x=>`<div style="margin-top:8px"><div class="note">${esc(x.k)}${x.state?"：<b style=\"color:var(--fg,#ddd)\">"+esc(x.state)+"</b>":""}</div><div>→ ${esc(x.do)}</div></div>`).join("")}
-    <div class="note" style="margin-top:10px">${esc(G.note)}</div></div>`;
-}
+// v1.13 2026/11/23 業種の画面：名前は形だけを言う言葉。そのものの値動き・半導体が下げた週に強い業種・言えない事を出す。「今週どうする」は外した
 function sectorView(){
-  const S=D.sector, st=S.stage, col={"0":"#d6b25e","1":"#e0727a","2":"#3fbf7f","3":"#8bb7e0","4":"#5fbf8f","9":"#8b95a3"};
+  const S=D.sector;
   const f=v=>v==null?"—":(v>0?"+":"")+Number(v).toFixed(1)+"%", cl=v=>v>0?"up":v<0?"dn":"";
-  let h=guideCard()+`<div class="card"><div class="row"><span class="note">${esc(S.prev_week)} → ${esc(S.week)} の週${S.partial?"（今週は途中）":""}（対TOPIX）</span><span class="note">半導体の買い場の段階</span></div>
-    <div style="text-align:center;margin:8px 0 0"><span class="lv" style="font-size:20px;padding:4px 16px;border-radius:14px;background:${col[st.id]};color:#111">${esc(st.label)}</span></div>
-    <div class="meter">${[0,1,2,3,4].map(k=>`<div style="${k===st.id?"background:"+col[k]:""}"></div>`).join("")}</div>
-    <div class="mlab"><span>様子見</span><span>弱さ継続</span><span>買い場</span><span>追いかけ</span><span>強さ継続</span></div>
-    <div class="note" style="margin-top:8px">${esc(st.action)}</div>
-    ${S.partial?`<div class="note" style="margin-top:6px;padding:6px 8px;border:1px solid #d6b25e;border-radius:8px;color:#d6b25e">この段階は ${esc(S.stage_week)} の週末に決まった物です。今週は途中（${esc(S.partial.last_day)}まで）で、今のところ「${esc(S.partial.label)}」。週の終わりに決まるので、まだ使いません。下の表の「今週」も途中の値です</div>`:""}
-    <div class="note" style="margin-top:4px">ディフェンシブ（食料品・電気ガス）で対TOPIXがプラス：${S.defense_plus}／2${S.defense_plus===2?"（半導体が下げている週の形）":S.defense_plus===0?"（ディフェンシブからお金が抜けている形）":""}</div></div>`;
-  h+=`<div class="cat">注目の6系列</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th><th>象限</th></tr>${S.focus.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td><td style="font-size:11px">${esc(r.quad)}</td></tr>`).join("")}</table></div>`;
+  let h="";
+  if(S.moves){
+    const two=(a,r)=>`<span class="${cl(a)}">${f(a)}</span>${r==null?"":`<div class="note">${f(r)}</div>`}`, u=S.uke||{};
+    h+=`<div class="card"><div class="row"><b>今週と今四半期</b><span class="note">そのものの値動き${S.partial?"（今週は途中）":""}</span></div>
+      <div style="overflow-x:auto;margin-top:6px"><table><tr><th></th><th>今週</th><th>今四半期</th></tr>
+      ${S.moves.map(m=>`<tr><td>${esc(m.name)}</td><td>${two(m.w_abs,m.w_rel)}</td><td>${two(m.q_abs,m.q_rel)}</td></tr>`).join("")}
+      <tr><td>受け皿<div class="note">${esc(u.of||"")}</div></td><td>${two(u.w_abs,null)}</td><td>${two(u.q_abs,null)}</td></tr></table></div>
+      <div class="note" style="margin-top:8px">小さい字は、TOPIXとの差。今週＝${esc(mdy(S.week_from))}→${esc(mdy(S.last_day))}、今四半期＝${esc(mdy(S.q_from))}→${esc(mdy(S.last_day))}</div>
+      <div class="note">TOPIXとの差がプラスでも、そのものが上がったとは限りません</div></div>`;
+  }
+  h+=`<div class="card"><div class="row"><b>${S.partial?"先週末の形":"今週の形"}</b><span class="note">${esc(mdy(S.prev_week))} → ${esc(mdy(S.week))} の週（TOPIXとの差）</span></div>
+    <div style="font-size:16px;font-weight:700;margin-top:6px">${esc(S.stage.label)}</div><div class="note">${esc(S.stage.action||"")}</div>
+    ${S.partial?`<div class="note" style="margin-top:6px;padding:6px 8px;border:1px solid #d6b25e;border-radius:8px;color:#d6b25e">この形は ${esc(S.stage_week)} の週末の物です。今週は途中（${esc(S.partial.last_day)}まで）で、今のところ「${esc(S.partial.label)}」。形は週の終わりに決まります</div>`:""}
+    <div class="note" style="margin-top:8px">直近の形</div>${S.history.slice().reverse().slice(0,6).map(x=>`<div class="row" style="font-size:13px;margin-top:2px"><span class="note">${esc(mdy(x.week))}${x.partial?"（途中）":""}</span><span${x.partial?' class="mute"':""}>${esc(x.label)}</span></div>`).join("")}</div>`;
+  const Y=S.yard||[];
+  if(Y.length){
+    const yb=y=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><div style="width:66px;font-size:12px;white-space:nowrap">${esc(y.name)}</div><div style="flex:1;height:10px;background:var(--panel2);border-radius:3px"><div style="height:10px;width:${y.down}%;background:var(--mute);border-radius:3px"></div></div><div style="width:42px;text-align:right;font-family:var(--num);font-size:13px">${y.down}%</div></div>`;
+    h+=`<div class="card"><div class="row"><b>半導体が下げた週に強い業種</b><span class="note">${S.yard_n?S.yard_n.down+"週":""}</span></div>
+      <div class="note" style="margin-top:4px">2644が下げた週に、その業種がTOPIXより強かった割合（${esc(S.since)}から）</div>
+      <div style="margin-top:6px">${Y.slice(0,9).sort((a,b)=>b.down-a.down).map(yb).join("")}<div class="note" style="margin:6px 0 2px">反対に、弱かった業種</div>${Y.slice(-3).sort((a,b)=>a.down-b.down).map(yb).join("")}</div>
+      <div class="note" style="margin-top:6px">同じ週の中の話です。次の週の話ではありません</div></div>`;
+  }
+  h+=`<div class="cat">注目の6系列（TOPIXとの差）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th><th>象限</th></tr>${S.focus.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td><td style="font-size:11px">${esc(r.quad)}</td></tr>`).join("")}</table></div>`;
   const all=S.rows.filter(r=>r.prev!=null&&r.now!=null), mx=Math.max(4,...all.map(r=>Math.max(Math.abs(r.prev),Math.abs(r.now))))*1.1, W=340, sc=v=>W/2+v/mx*(W/2-14);
   h+=`<div class="cat">33業種＋2644の4象限（横＝先週・縦＝今週）</div><div class="card"><svg viewBox="0 0 ${W} ${W}" style="width:100%;height:auto">
     <line x1="${W/2}" y1="0" x2="${W/2}" y2="${W}" stroke="#555"/><line x1="0" y1="${W/2}" x2="${W}" y2="${W/2}" stroke="#555"/>
@@ -307,53 +407,33 @@ function sectorView(){
     <text x="4" y="${W-4}" font-size="9" fill="#999">左下 弱さ継続</text><text x="${W-4}" y="${W-4}" font-size="9" fill="#999" text-anchor="end">右下 マイナス転換</text>
     ${all.map(r=>{const x=sc(r.prev),y=W-sc(r.now),c=r.now>0?(r.prev>0?"#3fbf7f":"#8bb7e0"):(r.prev>0?"#d6b25e":"#e0727a");return `<circle cx="${x}" cy="${y}" r="${r.focus?5:3}" fill="${c}"/>${r.focus?`<text x="${x+6}" y="${y+3}" font-size="10" fill="#ddd">${esc(r.name)}</text>`:""}`}).join("")}</svg>
     <div class="note">目盛り：中心から端まで ±${mx.toFixed(1)}%。名前つきは注目の6系列</div></div>`;
-  h+=`<div class="cat">ディフェンシブの物差し（${esc(S.since)}以降）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">業種</th><th>今週</th><th>2644が下げた週に<br>プラス</th><th>下げなかった週に<br>プラス</th></tr>${S.defense.map(d=>`<tr><td>${esc(d.name)}</td><td class="${cl(d.now)}">${f(d.now)}</td><td>${d.down}%<div class="note">${esc(d.down_n)}</div></td><td>${d.up}%<div class="note">${esc(d.up_n)}</div></td></tr>`).join("")}</table></div>`;
-  h+=`<div class="cat">段階ごとの、その後4週の2644（対TOPIX）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">段階</th><th>回数</th><th>平均</th><th>プラスの割合</th></tr>${S.stage_stats.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.count}</td><td class="${cl(s.avg)}">${f(s.avg)}</td><td>${s.win==null?"—":s.win+"%"}</td></tr>`).join("")}</table><div class="note">全部の週の平均 ${f(S.stage_base)}。回数が少ないので参考</div></div>`;
-  h+=`<div class="cat">直近8週の段階</div><div class="card">${S.history.slice().reverse().map(x=>`<div class="row"><span class="note">${esc(x.week)}${x.partial?"（途中）":""}</span><span${x.partial?' class="mute"':""}>${esc(x.label)}</span></div>`).join("")}</div>`;
-  h+=`<div class="cat">33業種＋2644（今週の対TOPIXの高い順）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th></tr>${S.rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td></tr>`).join("")}</table></div>`;
+  h+=`<div class="cat">形ごとの、その後4週の2644（TOPIXとの差）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">形</th><th>週の数</th><th>平均</th><th>プラスの割合</th></tr>${S.stage_stats.map(s=>`<tr><td style="white-space:normal">${esc(s.label)}</td><td>${s.count}</td><td class="${cl(s.avg)}">${f(s.avg)}</td><td>${s.win==null?"—":s.win+"%"}</td></tr>`).join("")}</table>
+    <div class="note" style="margin-top:6px">全部の週の平均 ${f(S.stage_base)}。週ごとのばらつきが大きく、形による差があるとは言えません</div></div>`;
+  h+=`<div class="card"><b>言えない事</b><div style="font-size:13px;line-height:1.7;margin-top:6px">この形の後に、半導体が上がるか下がるか。<br>来週、半導体と受け皿のどちらが強いか。</div>
+    ${S.persist?`<div class="note" style="margin-top:4px">今週と同じ向きが次の週も続いた割合は${S.persist.pct}%でした（${S.persist.n}週）</div>`:""}</div>`;
+  h+=`<div class="cat">33業種＋2644（今週のTOPIXとの差の高い順）</div><div class="card" style="overflow-x:auto"><table><tr><th style="text-align:left">系列</th><th>先週</th><th>今週</th></tr>${S.rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="${cl(r.prev)}">${f(r.prev)}</td><td class="${cl(r.now)}">${f(r.now)}</td></tr>`).join("")}</table></div>`;
   h+=`<p class="note" style="margin-top:16px">決め方：${esc(S.rule)}　過去の結果であり、この先を約束するものではありません。</p>`;
   return h;
 }
-function perfView(){
-  const f=D.flow;
-  const up=f.all.filter(r=>r.level>0), dn=f.all.filter(r=>r.level<0);
-  return `<p class="note">${f.tested}通りを計算し、前半（2013〜2021）と後半（2022〜）の両方で効いた ${f.all.length}通り。数字は相場ごとの「ふだん」との差（1か月後、ポイント）。ふだん：${Object.entries(f.base).map(([k,v])=>esc(k)+" "+(v>0?"+":"")+v+"%").join("、")}</p>
-    <div class="cat">上がりやすい側（${up.length}）</div>${up.map(r=>condCard(r)).join("")}
-    <div class="cat">下がりやすい側（${dn.length}）</div>${dn.map(r=>condCard(r)).join("")||'<div class="note">ありません</div>'}`;
-}
 function home(){
   cur=null;
+  if(SEC==="asset"&&D.asset){ assetView(); return; }
+  const ok={past:!!(D.level&&D.level.scene),sector:!!D.sector,map:hasMap(),list:true};
+  if(TAB&&!ok[TAB]) TAB=null;
+  if(TAB){
+    const T={past:"相場全体の過去の例",sector:"半導体と受け皿・業種",map:"値段の地図",list:"指標の一覧"};
+    $("#hdr").innerHTML=`<button class="back" id="bk">‹ 戻る</button><h1>${T[TAB]}</h1>`;
+    $("#bk").onclick=()=>go(null);
+    $("#main").innerHTML=TAB==="past"?pastView():TAB==="sector"?sectorView():TAB==="map"?mapView():listView();
+    if(TAB==="list") document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
+    bindNav(); window.scrollTo(0,0); return;
+  }
   $("#hdr").innerHTML=`<h1>マクロ<div class="sub">データ ${esc(D.latest)}まで ／ 作成 ${esc(D.made)}</div></h1><button class="menu" id="lk">ロック</button>`;
   $("#lk").onclick=()=>{ localStorage.removeItem("macro_pw"); D=null; lockScreen("ロックしました"); };
-  if(SEC==="asset"&&D.asset){ assetView(); return; }
-  if(TAB==null) TAB=hasMap()?"map":"flow";
-  if(TAB==="map"&&!hasMap()) TAB="flow";
-  if((TAB==="flow"||TAB==="perf")&&!D.flow) TAB=D.sector?"sector":"list";
-  if(TAB==="sector"&&!D.sector) TAB=D.flow?"flow":"list";
-  if(TAB!=="list"){
-    $("#main").innerHTML=seg()+levelCard()+tabs()+(TAB==="map"?mapView():TAB==="flow"?flowView():TAB==="sector"?sectorView():perfView());
-    bindTabs(); bindSeg(); document.querySelectorAll(".tap").forEach(c=>c.onclick=()=>c.classList.toggle("open")); bindLevel(); window.scrollTo(0,0); return;
-  }
-  let h=seg()+levelCard()+tabs();
-  for(const c of D.cats){
-    h+=`<div class="cat">${esc(c.title)}</div>`;
-    for(const it of c.items){
-      const lv=lastVal(it); let right="";
-      if(lv){ const ch=lv.flow?null:(lv.prev!=null?lv.v-lv.prev:null);
-        right=`<div class="v ${lv.flow?(lv.v>0?"up":lv.v<0?"dn":""):""}">${fmt(lv.v)}<small class="${ch>0?"up":ch<0?"dn":"mute"}">${lv.flow?"":ch==null?"":"前回比 "+(ch>0?"+":"")+fmt(ch)}</small></div>`; }
-      else if(it.kind==="snapshot") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄</div>`;
-      else if(it.kind==="strike") right=`<div class="v mute" style="font-size:12px">${esc(it.date)}</div>`;
-      else if(it.kind==="styles"){ const g=(it.data.spreads||[])[0]; right=`<div class="v mute" style="font-size:12px">${g?esc(g.name)+"<div>5日 "+(g.d5>0?"+":"")+Number(g.d5).toFixed(2)+"%</div>":""}</div>`; }
-      else if(it.kind==="baskets"){ const r=[...it.data.baskets].sort((a,b)=>b.d1-a.d1); right=`<div class="v mute" style="font-size:12px">強い ${esc(r[0].name)}<div>弱い ${esc(r[r.length-1].name)}</div></div>`; }
-      else if(it.kind==="sectors"){ const t=it.rows[0]; right=`<div class="v mute" style="font-size:12px">33業種　${esc(it.date||"")}<div>首位 ${esc(t?t[0]:"")}</div></div>`; }
-      else if(it.kind==="weights") right=`<div class="v mute" style="font-size:12px">${it.rows.length}銘柄　${esc(it.date||"")}</div>`;
-      h+=`<div class="item" data-id="${esc(it.id)}"><div><div class="t">${esc(it.title)}</div><div class="d">${lv?esc(lv.name)+"　"+esc(lv.d):""}</div></div>${right}</div>`;
-    }
-  }
-  h+=`<p class="note" style="margin-top:20px">元データ：${esc(D.source)}（④-1）。値は④-1のまま表示しています。</p>`;
-  $("#main").innerHTML=h; bindTabs(); bindSeg(); bindLevel();
-  document.querySelectorAll(".item").forEach(e=>e.onclick=()=>detail(e.dataset.id));
-  window.scrollTo(0,0);
+  $("#main").innerHTML=seg()+sceneCard()+semisCard()+nodesCard()
+    +`<button data-go="list" class="item" style="width:100%;font:inherit;color:var(--ink);text-align:left"><div><div class="t">指標の一覧</div><div class="d">金利・需給・先物・業種など、元の数字</div></div><div class="v" style="color:var(--accent)">›</div></button>
+    <p class="note" style="margin-top:14px">このアプリが出すのは、今の数字と過去の例だけです。買う・売る・待つは、ここには出しません。</p>`;
+  bindSeg(); bindNav(); window.scrollTo(0,0);
 }
 
 // ---------- 資産 ----------
